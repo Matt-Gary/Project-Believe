@@ -5,7 +5,7 @@ const db = require('./models');
 const app = express();
 app.use(express.json());
 app.use(cors());
-
+//Creating path for our registration
 const usersRouter = require('./routes/Users');
 app.use('/auth', usersRouter);
 
