@@ -4,11 +4,18 @@ const { Users, sequelize } = require('../models');
 const bcrypt = require("bcrypt");
 const jwt = require("jsonwebtoken")
 
+// Regular expression for email format validation
+const emailRegex = /^[\w-\.]+@([\w-]+\.)+[\w-]{2,4}$/;
 
 // Register a new user
 router.post("/register", async (req, res) => {
     // Extracting username, password, email, and matricula from the request body
     const { username, password, email, matricula } = req.body;
+
+    // Validate email format before proceeding
+    if (!emailRegex.test(email)) {
+        return res.status(400).json({error: "Invalid email format"})
+    }
 
     try {
         //Check if a user with the same email already exists
@@ -47,6 +54,10 @@ router.post("/register", async (req, res) => {
 // Route to log in an existing user
 router.post("/login", async (req, res) => {
     console.log(req.body)
+    // Validate email format before proceeding
+    if (!emailRegex.test(email)) {
+        return res.status(400).json({error: "Invalid email format"})
+    }
     try {
         // Extracting email, password, and matricula from the request body
         const {email, password, matricula} = req.body
