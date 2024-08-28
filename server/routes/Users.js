@@ -15,9 +15,11 @@ router.post("/register", async (req, res) => {
         const existingUser = await Users.findOne({ where: { email: email } });
         // Check if a user with the same matricula already exists
         const existingMatricula = await Users.findOne({ where: { matricula: matricula } });
+        // Validation: Check if matricula is already in use
         if (existingMatricula) {
             return res.status(400).json({error: "Matricula is already used"})
         }
+        // Validation: Check if the email is already registered
         if (existingUser) {
             return res.status(400).json({ error: "User already exists" });
         }
@@ -50,11 +52,13 @@ router.post("/login", async (req, res) => {
         const {email, password, matricula} = req.body
         // Find the user in the database by their email
         const user = await Users.findOne({where: {email}})
+        // Validation: Check if the user exists
         if(!user) {
             return res.status(400).json({message: "Invalid Credenstials"})    
         }
         // Compare the provided password with the stored hashed password
         const isPasswordMatch = await bcrypt.compare(password, user.password)
+        // Validation: Check if the password matches
         if(!isPasswordMatch) {
             return res.status(400).json({message: "Invalid Credenstials"})    
         }
