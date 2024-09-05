@@ -40,6 +40,7 @@ router.post("/register", async (req, res) => {
             password: hashedPassword, // Storing the hashed password, not the plain text
             matricula: matricula,
             email: email,
+            createdAt: Date.now()
         });
 
         // Respond with success message
@@ -53,14 +54,13 @@ router.post("/register", async (req, res) => {
 
 // Route to log in an existing user
 router.post("/login", async (req, res) => {
-    console.log(req.body)
+    // Extracting email, password, and matricula from the request body
+    const { email, password, matricula } = req.body;
     // Validate email format before proceeding
     if (!emailRegex.test(email)) {
         return res.status(400).json({error: "Invalid email format"})
     }
     try {
-        // Extracting email, password, and matricula from the request body
-        const {email, password, matricula} = req.body
         // Find the user in the database by their email
         const user = await Users.findOne({where: {email}})
         // Validation: Check if the user exists
@@ -83,8 +83,107 @@ router.post("/login", async (req, res) => {
         console.error("Error logging in:", error)
         res.status(500).json({message: "Server Error"})
     }
-}) 
+})
 
+// Route to get an existing user
+router.get("/userByMatricula", async (req, res) => {
+    // Extracting matricula from the request body
+    const {matricula} = req.body;
+    try {
+        // Find the user in the database by their email
+        const user = await Users.findOne({where: {matricula}})
+        // Validation: Check if the user exists
+        if(!user) {
+            return res.status(404).json({message: "User not found!"})    
+        }
+        const user_response = JSON.parse(JSON.stringify(user));
+        // Remove o campo indesejado, por exemplo, 'password'
+        delete user_response.password;
+        return res.status(200).json({user_response})
+    } catch (error) {
+        console.error("Get User Error in:", error)
+        res.status(500).json({message: "Server Error"})
+    }
+})
+
+// Route to delete an existing user
+router.delete("/userByMatricula", async (req, res) => {
+    // Extracting matricula from the request body
+    const {matricula} = req.body;
+    try {
+        // Find the user in the database by their email
+        const user = await Users.findOne({where: {matricula}})
+        // Validation: Check if the user exists
+        if(!user) {
+            return res.status(404).json({message: "User not found!"})    
+        }
+        const response = await Users.destroy({where: {matricula: matricula}
+        });
+        return res.status(200).json({message: "User deleted sucessfully!"})
+    } catch (error) {
+        console.error("Get User Error in:", error)
+        res.status(500).json({message: "Server Error"})
+    }
+})
+
+// Edit a existent user
+router.put("/userUpdateByMatricula", async (req, res) => {
+
+    const { username, email, matricula } = req.body;
+
+    try {
+
+        if(!(username == null || username.trim().length === 0) && !(email == null || email.trim().length === 0)){
+            return res.status(400).json("Field username and email is null or empty!");
+        }else if(matricula == null || matricula.trim().length === 0){
+            return res.status(400).json("The matricula can't be null or empty!");
+        }
+
+        //Get user by matricula
+        var userUpdated = await Users.findOne({ where: { matricula: matricula } });
+        if(!userUpdated){
+            return res.status(400).json("The matricula don't have a user registered!");
+        }
+
+        if (!(username == null || username.trim().length === 0)) {
+            const existingUsername = await Users.findOne({ where: { username: username } });
+            if(existingUsername) {
+                console.log("Username already exist!")    
+            }else{
+                //Update usermame
+                userUpdated.username = username
+            }
+        }
+
+        if (!(email == null || email.trim().length === 0)) {
+            const existingEmail = await Users.findOne({ where: { email: email } });
+            if(existingEmail) {
+                console.log("Email already exist!")    
+            }else{
+                //Update email
+                userUpdated.email = email
+            }
+        }
+
+        const [response] = await Users.update(
+            {
+                username: userUpdated.username,
+                email: userUpdated.email,
+                updatedAt: Date.now()
+            },
+            {
+                where: {
+                    matricula: matricula
+                }
+            }
+        );
+
+        return res.status(200).json("User updated successfully!");
+    } catch (error) {
+        console.error("Error updating user:", error);
+        return res.status(500).json({ error: "An error occurred while updating the user." });
+    }
+});
 
 // Middleware function to verify JWT token
 function verifyToken(req, res, next) {
