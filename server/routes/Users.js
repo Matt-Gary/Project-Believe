@@ -104,7 +104,7 @@ router.post("/logout", async (req, res) => {
 router.post("/forgot-password", async (req, res) => {
     const { email } = req.body
     try {
-        const user = await Users.findOne({email})
+        const user = await Users.findOne({where: {email}})
 
         if (!user) {
             return res.status(400).json({ success: false, message: "User not found"})
