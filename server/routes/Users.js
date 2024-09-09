@@ -3,6 +3,7 @@ const router = express.Router();
 const { Users, sequelize } = require('../models');
 const bcrypt = require("bcrypt");
 const jwt = require("jsonwebtoken")
+const { sendWelcomeEmail} = require("../mailtrap/emails.js")
 
 // Regular expression for email format validation
 const emailRegex = /^[\w-\.]+@([\w-]+\.)+[\w-]{2,4}$/;
@@ -35,14 +36,14 @@ router.post("/register", async (req, res) => {
         const hashedPassword = await bcrypt.hash(password, 10);
 
         // Create a new user in the Users table with the provided data
-        await Users.create({
+        const user = await Users.create({
             username: username,
             password: hashedPassword, // Storing the hashed password, not the plain text
             matricula: matricula,
             email: email,
             createdAt: Date.now()
         });
-
+        await sendWelcomeEmail(user.email, user.username)
         // Respond with success message
         return res.json("User registered successfully");
 
