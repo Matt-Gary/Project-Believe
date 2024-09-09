@@ -30,10 +30,24 @@ module.exports = (sequelize, DataTypes) => {
         validate: {
           notEmpty: true
         }
-      }
+      },
+      createdAt: {
+        type: DataTypes.DATE,
+        allowNull: false,
+        validate: {
+            notEmpty: true
+        }
+      },
+      updatedAt: {
+        type: DataTypes.DATE,
+        allowNull: true,
+        validate: {
+            notEmpty: false
+        }
+      },
     }, {
       tableName: 'Users', // Optional: Specify the table name
-      timestamps: true // Optional: Add createdAt and updatedAt timestamps
+      timestamps: false // Optional: Add createdAt and updatedAt timestamps
     });
   
     return Users;
