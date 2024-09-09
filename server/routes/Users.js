@@ -93,6 +93,13 @@ router.post("/login", async (req, res) => {
         res.status(500).json({message: "Server Error"})
     }
 })
+// Route to log out
+router.post("/logout", async (req, res) => {
+    //deleting cookie
+    res.clearCookie("accessToken")
+    res.status(200).json({success: true, message: "Logged out succesfully"})
+
+})
 
 // Route to get an existing user
 router.get("/userByMatricula", async (req, res) => {
