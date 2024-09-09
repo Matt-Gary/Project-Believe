@@ -3,6 +3,7 @@ const router = express.Router();
 const { Users, sequelize } = require('../models');
 const bcrypt = require("bcrypt");
 const jwt = require("jsonwebtoken")
+const crypto = require('crypto')
 const { sendWelcomeEmail} = require("../mailtrap/emails.js")
 
 // Regular expression for email format validation
@@ -78,8 +79,15 @@ router.post("/login", async (req, res) => {
         const token = jwt.sign({matricula: user.matricula}, "secretkey", {
             expiresIn: "1h" // Token will expire in 1 hour
         })
-        // Send the token as a response
-        res.json({token})
+        //Set the token in a cookie
+        res.cookie("accessToken", token, {
+            httpOnly: true, //Prevents JavaScripts access
+            secure: process.env.NODE_ENV === "production", // Use HTTPS in production
+            sameSite: "Strict", // Prevents CSRF attacks
+            maxAge: 3600000 // 1hour
+        })
+        res.json({token, message: "Login succesfully"})
+
     } catch (error) {
         console.error("Error logging in:", error)
         res.status(500).json({message: "Server Error"})
@@ -189,15 +197,14 @@ router.put("/userUpdateByMatricula", async (req, res) => {
 // Middleware function to verify JWT token
 function verifyToken(req, res, next) {
     // Get the token from the request header
-    const token = req.header("Authorization")
+    const token = req.cookies.accessToken //Access token from cookies
     if (!token) {
         return res.status(401).json({ message: "Access Denied" })
     }
     try {
         // Verify the token and extract the user data
         const decoded = jwt.verify(
-            token.split(" ")[1],
-            "secretkey"
+            token, "secretkey"
         )
         // Attach the decoded user data to the request object
         req.user = decoded
