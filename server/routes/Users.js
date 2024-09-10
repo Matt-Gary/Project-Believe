@@ -118,7 +118,7 @@ router.post("/forgot-password", async (req, res) => {
 
         await user.save()
         //send email with a link to reset a password 
-        await sendPasswordResetEmail(user.email, `http://localhost:4000/reset-password/${resetToken}`)
+        await sendPasswordResetEmail(user.email, `http://localhost:4000/reset-password/${resetToken}`, user.username)
 
         res.status(200).json({success: true, message: "Password reset link sent to your email"})
 
@@ -150,7 +150,7 @@ router.post("/reset-password/:token", async (req, res) => {
 
         await user.save()
 
-        await sendResetSuccessEmail(user.email)
+        await sendResetSuccessEmail(user.email, user.username)
 
         res.status(200).json({success: true, message:" Password reset sucessful"})
     } catch (error) {

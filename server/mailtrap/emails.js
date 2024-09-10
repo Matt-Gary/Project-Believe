@@ -12,7 +12,11 @@ const sendWelcomeEmail = async (email, username) => {
             template_uuid: "76119ec9-4925-415f-9de3-03207bf04c90",
             template_variables: {
                 "company_info_name": "Believe",
-                "name": username
+                "name": username,
+                "company_info_address": "R. Vicente Leite, 1536 - Aldeota",
+                "company_info_city": "Fortaleza-CE",
+                "company_info_zip_code":"60150-165",
+                "company_info_country": "Brasil"
             }
         })
         console.log("Email sent sussessfully", response)
@@ -23,7 +27,7 @@ const sendWelcomeEmail = async (email, username) => {
     }
 
 }
-const sendPasswordResetEmail = async (email, resetURL) => {
+const sendPasswordResetEmail = async (email, resetURL, username) => {
     const recepient = [{email}]
 
     try {
@@ -31,7 +35,9 @@ const sendPasswordResetEmail = async (email, resetURL) => {
             from: sender,
             to: recepient,
             subject: "Reset password",
-            html: PASSWORD_RESET_REQUEST_TEMPLATE.replace("{resetURL}", resetURL)
+            html: PASSWORD_RESET_REQUEST_TEMPLATE
+            .replace("{resetURL}", resetURL)
+            .replace("{name}", username)
         })
     } catch (error) {
         console.error(`Error sending password reset email`, error)
@@ -39,7 +45,7 @@ const sendPasswordResetEmail = async (email, resetURL) => {
         throw new Error (`Error sending password reset email: ${error}`)
     }
 }
-const sendResetSuccessEmail = async (email) => {
+const sendResetSuccessEmail = async (email, username) => {
     const recepient = [{email}]
 
     try {
@@ -47,7 +53,7 @@ const sendResetSuccessEmail = async (email) => {
             from: sender,
             to: recepient,
             subject: "Password reset successfully",
-            html: PASSWORD_RESET_SUCCESS_TEMPLATE,
+            html: PASSWORD_RESET_SUCCESS_TEMPLATE.replace("{name}", username),
             category: "Password Reset"
         })
         console.log ("Password reset email sent successfully", response)
