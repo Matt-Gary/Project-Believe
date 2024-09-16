@@ -278,6 +278,52 @@ function verifyToken(req, res, next) {
         res.status(401).json({message: "Invalid Token"})
     }
 }
+
+// Accessible only with a valid JWT token
+router.post("/userChangePassword", verifyToken, async (req, res) => {
+    try {
+        // Get user body
+        const {oldPassword,newPassword} = req.body;
+
+        // Find the user by their matricula from the decoded JWT data
+        const user = await Users.findByPk(req.user.matricula)
+
+        // Compare the old password with the stored hashed password
+        const isPasswordMatch = await bcrypt.compare(oldPassword, user.password)
+
+        // Verify old and new password!
+        if(oldPassword == newPassword){
+            return res.status(400).json({message: "The passwords can't be same!"})
+        }
+        else if(!isPasswordMatch) {
+            return res.status(400).json({message: "Old password is wrong!"})    
+        }
+
+        // Hash the password before storing it in the database
+        const hashedPassword = await bcrypt.hash(newPassword, 10);
+
+        // Flow to update password
+        const [response] = await Users.update(
+            {
+                password: hashedPassword,
+                updatedAt: Date.now()
+            },
+            {
+                where: {
+                    matricula: req.user.matricula
+                }
+            }
+        );
+
+        return res.status(200).json({message: "Update password completed!"})
+
+    } catch (error) {
+        console.error("Error fetching user change password:", error)
+        res.status(500).json({message: "Server Error"})
+    }
+})
+module.exports = router;
+
 // Protected route to get user info, accessible only with a valid JWT token
 router.get("/userinfo", verifyToken, async (req, res) => {
     try {
