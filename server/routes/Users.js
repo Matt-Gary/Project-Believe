@@ -5,6 +5,27 @@ const bcrypt = require("bcrypt");
 const jwt = require("jsonwebtoken")
 const crypto = require('crypto')
 const { sendWelcomeEmail, sendPasswordResetEmail, sendResetSuccessEmail} = require("../mailtrap/emails.js")
+const multer = require("multer")
+const path = require('path')
+
+// Multer configuration
+//<form action="/users/update-photo" method="POST" enctype="multipart/form-data">
+//<input type="file" name="profilePhoto" accept="image/*">
+//<button type="submit">Upload Profile Photo</button>
+//</form>
+const storage = multer.diskStorage({
+    destination: (req, file, cb) => {
+        cb(null, 'ProfileImages') //where we want to store this images
+    },
+
+    filename: (req, file, cb) => { //we need to specify the name, adding the date of adding file and the file name
+        console.log(file) 
+        cb(null, Date.now() + path.extname(file.originalname)) //cb= call back - the name is replace with current date + original name
+    }
+
+    })
+
+const upload = multer({storage: storage}) //upload middleware that had object storage determining where we want to store the image
 
 // Regular expression for email format validation
 const emailRegex = /^[\w-\.]+@([\w-]+\.)+[\w-]{2,4}$/;
@@ -336,6 +357,29 @@ router.get("/userinfo", verifyToken, async (req, res) => {
     } catch (error) {
         console.error("Error fetching user info:", error)
         res.status(500).json({message: "Server Error"})
+    }
+})
+
+router.post("/update-photo", verifyToken, upload.single('image'), async (req, res) => {
+    const userMatricula = req.user.matricula
+    const profilePhotoPath = req.file ? req.file.path : null // Get the uploaded image path
+
+    if (!profilePhotoPath) {
+        return res.status(400).json({ message: "No image uploaded"})
+    }
+    try {
+        // Find the user by matricula and update their profile photo path
+        const user = await Users.findOne({where: {matricula:userMatricula}})
+
+        if (!user) {
+            return res.status(404).json({message: "User not found"})
+        }
+        user.profilePhoto = profilePhotoPath; // Update the profile photo path
+        await user.save() 
+        res.status(200).json({ message: "Profile photo updates successfully", profilePhoto: profilePhotoPath })
+    } catch (error) {
+        console.error("Error updating profile photo", error)
+        res.status(500).json({message: "An error occured while updating the profile photo."})
     }
 })
 module.exports = router;
