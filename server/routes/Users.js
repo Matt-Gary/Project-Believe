@@ -7,6 +7,7 @@ const crypto = require('crypto')
 const { sendWelcomeEmail, sendPasswordResetEmail, sendResetSuccessEmail} = require("../mailtrap/emails.js")
 const multer = require("multer")
 const path = require('path')
+const fs = require('fs') // To handle file system operations
 
 // Multer configuration
 //<form action="/users/update-photo" method="POST" enctype="multipart/form-data">
@@ -373,6 +374,15 @@ router.post("/update-photo", verifyToken, upload.single('image'), async (req, re
 
         if (!user) {
             return res.status(404).json({message: "User not found"})
+        }
+        // Check if the user already has a profile photo
+        if (user.profilePhoto) {
+            const oldPhotoPath = user.profilePhoto
+            // Delete the old profile photo from the file system
+            fs.unlink(oldPhotoPath, (err) => {
+                console.error("Error deleting old photo", err)
+            })
+
         }
         user.profilePhoto = profilePhotoPath; // Update the profile photo path
         await user.save() 
