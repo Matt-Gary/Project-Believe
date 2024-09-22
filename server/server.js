@@ -11,8 +11,12 @@ app.use(cookieParser())
 //Creating path for our registration
 const usersRouter = require('./routes/Users');
 app.use('/auth', usersRouter);
+
+const eventRoutes = require('./routes/Gallery');
+app.use('/gallery', eventRoutes);
+
 // Uploading photos
-app.use('/ProfileImages', express.static(path.join(__dirname, 'ProfileImages')))
+app.use('/uploades/ProfileImages', express.static(path.join(__dirname, 'ProfileImages')))
 
 db.sequelize.sync().then(() => {
     app.listen(4000, () => {

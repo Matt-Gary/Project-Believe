@@ -4,6 +4,7 @@ const { Users, sequelize } = require('../models');
 const bcrypt = require("bcrypt");
 const jwt = require("jsonwebtoken")
 const crypto = require('crypto')
+const verifyToken = require('../middleware/verifyToken'); // Import the middleware
 const { sendWelcomeEmail, sendPasswordResetEmail, sendResetSuccessEmail} = require("../mailtrap/emails.js")
 const multer = require("multer")
 const path = require('path')
@@ -17,7 +18,7 @@ const sharp = require('sharp') //resizing photos
 //</form>
 const storage = multer.diskStorage({
     destination: (req, file, cb) => {
-        cb(null, 'ProfileImages') //where we want to store this images
+        cb(null, 'uploads/ProfileImages') //where we want to store this images
     },
 
     filename: (req, file, cb) => { //we need to specify the name, adding the date of adding file and the file name
@@ -281,27 +282,6 @@ router.put("/userUpdateByMatricula", async (req, res) => {
     }
 });
 
-// Middleware function to verify JWT token
-function verifyToken(req, res, next) {
-    // Get the token from the request header
-    const token = req.cookies.accessToken //Access token from cookies
-    if (!token) {
-        return res.status(401).json({ message: "Access Denied" })
-    }
-    try {
-        // Verify the token and extract the user data
-        const decoded = jwt.verify(
-            token, "secretkey"
-        )
-        // Attach the decoded user data to the request object
-        req.user = decoded
-        next()
-    } catch (error) {
-        console.error("Error verifying token:", error)
-        res.status(401).json({message: "Invalid Token"})
-    }
-}
-
 // Accessible only with a valid JWT token
 router.post("/userChangePassword", verifyToken, async (req, res) => {
     try {
@@ -397,7 +377,7 @@ router.post("/update-photo", verifyToken, upload.single('image'), async (req, re
         const imageBuffer = req.file.buffer;
 
         // Resize the uploaded image to 200x200 pixels in memory using sharp
-        const resizedPhotoPath = path.join('ProfileImages', `resized-${Date.now()}${path.extname(req.file.originalname)}`);
+        const resizedPhotoPath = path.join('uploads/ProfileImages', `resized-${Date.now()}${path.extname(req.file.originalname)}`);
         await sharp(imageBuffer)
             .resize(200, 200) // Resize to 200x200 pixels
             .toFile(resizedPhotoPath); // Save the resized image to the file system
