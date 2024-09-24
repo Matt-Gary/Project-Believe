@@ -4,7 +4,31 @@ const { Users, sequelize } = require('../models');
 const bcrypt = require("bcrypt");
 const jwt = require("jsonwebtoken")
 const crypto = require('crypto')
+const verifyToken = require('../middleware/verifyToken'); // Import the middleware
 const { sendWelcomeEmail, sendPasswordResetEmail, sendResetSuccessEmail} = require("../mailtrap/emails.js")
+const multer = require("multer")
+const path = require('path')
+const fs = require('fs') // To handle file system operations
+const sharp = require('sharp') //resizing photos
+
+// Multer configuration
+//<form action="/users/update-photo" method="POST" enctype="multipart/form-data">
+//<input type="file" name="profilePhoto" accept="image/*">
+//<button type="submit">Upload Profile Photo</button>
+//</form>
+const storage = multer.diskStorage({
+    destination: (req, file, cb) => {
+        cb(null, 'uploads/ProfileImages') //where we want to store this images
+    },
+
+    filename: (req, file, cb) => { //we need to specify the name, adding the date of adding file and the file name
+        console.log(file) 
+        cb(null, Date.now() + path.extname(file.originalname)) //cb= call back - the name is replace with current date + original name
+    }
+
+    })
+
+const upload = multer({storage: multer.memoryStorage()}) //upload middleware that had object storage determining where we want to store the image, This ensures files are stored as buffer
 
 // Regular expression for email format validation
 const emailRegex = /^[\w-\.]+@([\w-]+\.)+[\w-]{2,4}$/;
@@ -258,27 +282,6 @@ router.put("/userUpdateByMatricula", async (req, res) => {
     }
 });
 
-// Middleware function to verify JWT token
-function verifyToken(req, res, next) {
-    // Get the token from the request header
-    const token = req.cookies.accessToken //Access token from cookies
-    if (!token) {
-        return res.status(401).json({ message: "Access Denied" })
-    }
-    try {
-        // Verify the token and extract the user data
-        const decoded = jwt.verify(
-            token, "secretkey"
-        )
-        // Attach the decoded user data to the request object
-        req.user = decoded
-        next()
-    } catch (error) {
-        console.error("Error verifying token:", error)
-        res.status(401).json({message: "Invalid Token"})
-    }
-}
-
 // Accessible only with a valid JWT token
 router.post("/userChangePassword", verifyToken, async (req, res) => {
     try {
@@ -338,4 +341,105 @@ router.get("/userinfo", verifyToken, async (req, res) => {
         res.status(500).json({message: "Server Error"})
     }
 })
+
+router.post("/update-photo", verifyToken, upload.single('image'), async (req, res) => {
+    const userMatricula = req.user.matricula;
+
+    // Ensure an image is uploaded
+    if (!req.file) {
+        return res.status(400).json({ message: "No image uploaded" });
+    }
+
+    try {
+        // Find the user by matricula and check for an existing profile photo
+        const user = await Users.findOne({ where: { matricula: userMatricula } });
+
+        if (!user) {
+            return res.status(404).json({ message: "User not found" });
+        }
+
+        // If the user already has a profile photo, attempt to delete it
+        if (user.profilePhoto) {
+            const oldPhotoPath = user.profilePhoto;
+            // Check if the old photo exists before trying to delete it
+            if (fs.existsSync(oldPhotoPath)) {
+                fs.unlink(oldPhotoPath, (err) => {
+                    if (err) {
+                        console.error("Error deleting old photo:", err);
+                    } else {
+                        console.log("Old profile photo deleted successfully:", oldPhotoPath);
+                    }
+                });
+            }
+        }
+
+        // Read the uploaded file buffer (from multer)
+        const imageBuffer = req.file.buffer;
+
+        // Resize the uploaded image to 200x200 pixels in memory using sharp
+        const resizedPhotoPath = path.join('uploads/ProfileImages', `resized-${Date.now()}${path.extname(req.file.originalname)}`);
+        await sharp(imageBuffer)
+            .resize(200, 200) // Resize to 200x200 pixels
+            .toFile(resizedPhotoPath); // Save the resized image to the file system
+
+        // Set the resized image as the user's new profile photo path
+        user.profilePhoto = resizedPhotoPath;
+
+        // Save the updated user with the new profile photo
+        await user.save();
+
+        // Send success response back to the client
+        res.status(200).json({ message: "Profile photo updated successfully", profilePhoto: resizedPhotoPath });
+
+    } catch (error) {
+        console.error("Error updating profile photo:", error);
+        res.status(500).json({ message: "An error occurred while updating the profile photo." });
+    }
+});
+// Route to delete profile photo
+router.delete("/delete-profile-photo", verifyToken, async (req, res) => {
+    const userMatricula = req.user.matricula;
+
+    try {
+        // Find the user by matricula
+        const user = await Users.findOne({ where: { matricula: userMatricula } });
+
+        if (!user) {
+            return res.status(404).json({ message: "User not found" });
+        }
+
+        // Check if the user has a profile photo
+        if (user.profilePhoto) {
+            const photoPath = user.profilePhoto;
+
+            // Check if the file exists before attempting to delete it
+            if (fs.existsSync(photoPath)) {
+                // Delete the photo from the file system
+                fs.unlink(photoPath, (err) => {
+                    if (err) {
+                        console.error("Error deleting profile photo:", err);
+                        return res.status(500).json({ message: "Failed to delete profile photo" });
+                    } else {
+                        console.log("Profile photo deleted successfully:", photoPath);
+                    }
+                });
+            } else {
+                return res.status(404).json({ message: "Profile photo not found on the server" });
+            }
+
+            // Remove the profile photo path from the user's record in the database
+            user.profilePhoto = null;
+            await user.save();
+
+            // Send success response
+            return res.status(200).json({ message: "Profile photo deleted successfully" });
+        } else {
+            return res.status(400).json({ message: "User has no profile photo to delete" });
+        }
+    } catch (error) {
+        console.error("Error deleting profile photo:", error);
+        return res.status(500).json({ message: "An error occurred while deleting the profile photo" });
+    }
+});
+
 module.exports = router;

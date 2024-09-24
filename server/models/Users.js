@@ -31,6 +31,10 @@ module.exports = (sequelize, DataTypes) => {
           notEmpty: true
         }
       },
+      profilePhoto: {
+        type: DataTypes.STRING,
+        allowNull:true,
+      },
       resetPasswordCode: {
         type: DataTypes.STRING,
       },
