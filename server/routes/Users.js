@@ -131,8 +131,8 @@ router.post("/logout", async (req, res) => {
     res.status(200).json({success: true, message: "Logged out succesfully"})
 
 })
-// Route to forgot password
-router.post("/forgot-password", authorize(['ADMIN', 'USER']), async (req, res) => {
+// Route to forgot passworddd
+router.post("/forgot-password", async (req, res) => {
     const { email } = req.body
     try {
         const user = await Users.findOne({where: {email}})
@@ -160,7 +160,7 @@ router.post("/forgot-password", authorize(['ADMIN', 'USER']), async (req, res) =
     }
 })
 // Reset password route
-router.post("/reset-password/:token", authorize(['ADMIN', 'USER']), async (req, res) => {
+router.post("/reset-password/:token", async (req, res) => {
     try{ 
         const {token} = req.params
         const {password} = req.body
