@@ -41,6 +41,11 @@ module.exports = (sequelize, DataTypes) => {
       resetPasswordExpiresAt: {
         type: DataTypes.DATE,
       },
+      role: {
+        type: DataTypes.ENUM('ADMIN', 'USER'),
+        allowNull: false,
+        defaultValue: 'USER'
+      },
       createdAt: {
         type: DataTypes.DATE,
         allowNull: false,

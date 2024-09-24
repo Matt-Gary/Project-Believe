@@ -5,6 +5,7 @@ const multer = require('multer');
 const path = require('path');
 const verifyToken = require('../middleware/verifyToken'); // Import the middleware
 const fs = require('fs')
+const authorize = require('../middleware/authorize'); //authorization middleware
 
 // Configure Multer storage for photo uploads
 const storage = multer.diskStorage({
@@ -19,7 +20,7 @@ const storage = multer.diskStorage({
 const upload = multer({ storage: storage });
 
 // POST route to create or update an event (with description)
-router.post('/events',verifyToken, async (req, res) => {
+router.post('/events',verifyToken,  async (req, res) => {
     try {
       const { id, name, description, event_date } = req.body;
 
@@ -66,7 +67,7 @@ router.get('/events/:id', verifyToken, async (req, res) => {
 });
 
   // DELETE route to delete an event by ID
-router.delete('/events/:id', verifyToken, async (req, res) => {
+router.delete('/events/:id', verifyToken, authorize(['ADMIN']), async (req, res) => {
   try {
     const eventId = req.params.id;
 
@@ -81,7 +82,7 @@ router.delete('/events/:id', verifyToken, async (req, res) => {
 });
 
 // POST route to upload photos to a specific event
-router.post('/events/:id/photos', verifyToken, upload.array('photos', 30), async (req, res) => {
+router.post('/events/:id/photos', verifyToken, authorize(['ADMIN']), upload.array('photos', 30), async (req, res) => {
   try {
     const eventId = req.params.id;
     const photoFiles = req.files;
@@ -102,7 +103,7 @@ router.post('/events/:id/photos', verifyToken, upload.array('photos', 30), async
 });
 
 // DELETE route to delete a specific photo by ID
-router.delete('/photos/:id', verifyToken, async (req, res) => {
+router.delete('/photos/:id', verifyToken, authorize(['ADMIN']), async (req, res) => {
   try {
     const photoId = req.params.id;
 
@@ -115,7 +116,7 @@ router.delete('/photos/:id', verifyToken, async (req, res) => {
 });
 
 // DELETE route to delete all photos for a specific event
-router.delete('/events/:id/photos', verifyToken, async (req, res) => {
+router.delete('/events/:id/photos', verifyToken, authorize(['ADMIN']), async (req, res) => {
   try {
     const eventId = req.params.id;
 
@@ -145,7 +146,7 @@ router.delete('/events/:id/photos', verifyToken, async (req, res) => {
 });
 
 // PUT route to modify the description of a specific event
-router.put('/events/:id/description', verifyToken, async (req, res) => {
+router.put('/events/:id/description', verifyToken, authorize(['ADMIN']), async (req, res) => {
   try {
     const eventId = req.params.id;
     const { description } = req.body;
@@ -167,7 +168,7 @@ router.put('/events/:id/description', verifyToken, async (req, res) => {
 });
 
 // DELETE route to delete the description of a specific event (set description to null)
-router.delete('/events/:id/description', verifyToken, async (req, res) => {
+router.delete('/events/:id/description', verifyToken, authorize(['ADMIN']), async (req, res) => {
   try {
     const eventId = req.params.id;
 
