@@ -20,7 +20,7 @@ const storage = multer.diskStorage({
 const upload = multer({ storage: storage });
 
 // POST route to create or update an event (with description)
-router.post('/events',verifyToken,  async (req, res) => {
+router.post('/events',verifyToken, authorize(['ADMIN']), async (req, res) => {
     try {
       const { id, name, description, event_date } = req.body;
 
@@ -42,6 +42,8 @@ router.post('/events',verifyToken,  async (req, res) => {
     }
   });
 
+
+
 // GET route to display the details of a specific event with description and photos
 router.get('/events/:id', verifyToken, async (req, res) => {
   try {
@@ -55,14 +57,32 @@ router.get('/events/:id', verifyToken, async (req, res) => {
     }
 
     // Fetch the associated photos for the event
-    const photos = await Photos.findAll({ where: { event_id: eventId } });
+    let photos;
+    
+    if (req.user) {
+      // Logged-in user: Show both public and private photos
+      photos = await Photos.findAll({ 
+        where: { 
+          event_id: eventId
+        }
+      });
+    } else {
+      // Guest: Show only public photos
+      photos = await Photos.findAll({
+        where: {
+          event_id: eventId,
+          visibility: 'PUBLIC' // Only fetch public photos for guests
+        }
+      });
+    }
 
     res.json({ 
       event,
       photos 
     });
   } catch (error) {
-    res.status(500).json({ error: 'Failed to retrieve event and photos' });
+    console.error('Error retrieving event and photos:', error);
+    res.status(500).json({ error: 'Failed to retrieve event and photos', details: error.message });
   }
 });
 
@@ -86,11 +106,15 @@ router.post('/events/:id/photos', verifyToken, authorize(['ADMIN']), upload.arra
   try {
     const eventId = req.params.id;
     const photoFiles = req.files;
+    const { visibility } = req.body; // Expecting visibility for each photo (as array or single value)
 
-    const photos = photoFiles.map(file => ({
+    // Check if visibility is an array (for multiple files) or a single value
+    const visibilityFlags = Array.isArray(visibility) ? visibility : [visibility];
+    const photos = photoFiles.map((photoFile, index) => ({
       event_id: eventId,
-      photo_url: `/uploads/photos/${file.filename}`,
-      photo_name: file.originalname,
+      photo_url: `/uploads/photos/${photoFile.filename}`,
+      photo_name: photoFile.originalname,
+      visibility: visibilityFlags[index] === 'PUBLIC' ? 'PUBLIC' : 'PRIVATE', // Set visibility based on provided value or default to PRIVATE
     }));
 
     await Photos.bulkCreate(photos);
@@ -101,7 +125,33 @@ router.post('/events/:id/photos', verifyToken, authorize(['ADMIN']), upload.arra
     res.status(500).json({ error: 'Failed to upload photos' });
   }
 });
+router.put('/photos/:id/visibility', verifyToken, authorize(['ADMIN']), async (req, res) => {
+  try {
+    const photoId = req.params.id;
+    const { visibility } = req.body;
 
+    // Ensure the provided visibility is valid
+    if (!['PUBLIC', 'PRIVATE'].includes(visibility)) {
+      return res.status(400).json({ error: 'Invalid visibility value. Must be either PUBLIC or PRIVATE.' });
+    }
+
+    // Find the photo by ID
+    const photo = await Photos.findOne({ where: { id: photoId } });
+
+    if (!photo) {
+      return res.status(404).json({ error: 'Photo not found' });
+    }
+
+    // Update the photo's visibility
+    photo.visibility = visibility;
+    await photo.save();
+
+    res.json({ message: 'Photo visibility updated successfully', photo });
+  } catch (error) {
+    console.error('Error updating photo visibility:', error);
+    res.status(500).json({ error: 'Failed to update photo visibility' });
+  }
+});  
 // DELETE route to delete a specific photo by ID
 router.delete('/photos/:id', verifyToken, authorize(['ADMIN']), async (req, res) => {
   try {

@@ -5,7 +5,9 @@ function verifyToken(req, res, next) {
     const token = req.cookies.accessToken || req.headers['authorization']?.split(" ")[1]; // Support for cookies or Authorization header (Bearer token)
     
     if (!token) {
-        return res.status(401).json({ message: "Access Denied: No Token Provided" });
+        // No token provided, treat the user as a guest
+        req.user = null; // Set req.user to null to signify guest access
+        return next(); // Proceed to the next middleware or route handler
     }
 
     try {
