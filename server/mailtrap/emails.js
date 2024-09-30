@@ -1,5 +1,5 @@
 const { sender, mailtrapClient } = require("./mailtrap.js");
-const { PASSWORD_RESET_REQUEST_TEMPLATE, PASSWORD_RESET_SUCCESS_TEMPLATE} = require("./email.Templates.js");
+const { PASSWORD_RESET_REQUEST_TEMPLATE, PASSWORD_RESET_SUCCESS_TEMPLATE, VERIFICATION_CODE_TEMPLATE} = require("./email.Templates.js");
 
 
 const sendWelcomeEmail = async (email, username) => {
@@ -63,4 +63,25 @@ const sendResetSuccessEmail = async (email, username) => {
         throw new Error (`Error sending password reset success email: ${error}`)
     }
 }
-module.exports = {sendWelcomeEmail, sendPasswordResetEmail, sendResetSuccessEmail}
+const sendVerificationCode = async (userEmail, companyEmail, verificationCode, userName, companyName) => {
+    const recipients = [{ email: userEmail }, { email: companyEmail }];
+
+    try {
+        const response = await mailtrapClient.send({
+            from: sender,
+            to: recipients,
+            subject: "Código de Verificação para Reivindicação de Benefício",
+            html: VERIFICATION_CODE_TEMPLATE
+                .replace("{verificationCode}", verificationCode)
+                .replace("{userName}", userName)
+                .replace("{companyName}", companyName)
+        });
+
+        console.log("Verification code emails sent successfully", response);
+        return response;
+    } catch (error) {
+        console.error(`Error sending verification code emails`, error);
+        throw new Error(`Error sending verification code emails: ${error}`);
+    }
+};
+module.exports = {sendWelcomeEmail, sendPasswordResetEmail, sendResetSuccessEmail, sendVerificationCode}

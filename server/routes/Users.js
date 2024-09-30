@@ -104,8 +104,10 @@ router.post("/login", async (req, res) => {
         }
         // Create a JSON Web Token (JWT) for the user
         const token = jwt.sign({
-            matricula: user.matricula,
-            role: user.role
+            matricula: user.matricula, 
+            email: user.email,
+            username: user.username,
+            role: user.role 
         },
          "secretkey", {
             expiresIn: "1h" // Token will expire in 1 hour

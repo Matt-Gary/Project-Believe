@@ -6,6 +6,7 @@ function verifyToken(req, res, next) {
     
     if (!token) {
         // No token provided, treat the user as a guest
+        console.log('No token provided');
         req.user = null; // Set req.user to null to signify guest access
         return next(); // Proceed to the next middleware or route handler
     }
@@ -17,6 +18,8 @@ function verifyToken(req, res, next) {
         // Attach the decoded user data (including role) to the request object
         req.user = {
             matricula: decoded.matricula, // User's unique identifier
+            email: decoded.email, // User's email
+            username: decoded.username, // User's username
             role: decoded.role // User's role (e.g., ADMIN, USER)
         };
 

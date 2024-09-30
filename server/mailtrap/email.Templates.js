@@ -93,5 +93,36 @@ const PASSWORD_RESET_REQUEST_TEMPLATE = `
 </body>
 </html>
 `;
-
-module.exports = {VERIFICATION_EMAIL_TEMPLATE, PASSWORD_RESET_REQUEST_TEMPLATE, PASSWORD_RESET_SUCCESS_TEMPLATE, PASSWORD_RESET_SUCCESS_TEMPLATE }
+const VERIFICATION_CODE_TEMPLATE = `
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Código de Verificação para Reivindicação de Benefício</title>
+</head>
+<body style="font-family: Arial, sans-serif; line-height: 1.6; color: white; max-width: 600px; margin: 0 auto; padding: 20px;">
+  <div style="background: linear-gradient(to right, #00B4D8, #0194B2); padding: 20px; text-align: center;">
+    <h1 style="color: white; margin: 0;">Código de Verificação para Reivindicação de Benefício</h1>
+  </div>
+  <div style="background: linear-gradient(to right, #3C3C3C, #000000); padding: 20px; border-radius: 0 0 5px 5px; box-shadow: 0 2px 5px rgba(0,0,0,0.1);">
+    <p>Olá {userName},</p>
+    <p>Você está recebendo este e-mail porque uma reivindicação de benefício foi iniciada em parceria com {companyName}.</p>
+    <p>Seu código de verificação é:</p>
+    <div style="text-align: center; margin: 30px 0;">
+      <div style="background-color: #00B4D8; color: white; padding: 10px 20px; border-radius: 5px; display: inline-block; font-size: 24px; font-weight: bold;">
+        {verificationCode}
+      </div>
+    </div>
+    <p>Por favor, use este código para confirmar sua reivindicação de benefício.</p>
+    <p>Se você não iniciou esta reivindicação, por favor ignore este e-mail ou entre em contato com nossa equipe de suporte imediatamente.</p>
+    <p>Este código é válido por um período limitado de tempo.</p>
+    <p>Atenciosamente,<br>Equipe Believe</p>
+  </div>
+  <div style="text-align: center; margin-top: 20px; color: #888; font-size: 0.8em;">
+    <p>Esta é uma mensagem automática, por favor não responda a este e-mail.</p>
+  </div>
+</body>
+</html>
+`
+module.exports = {VERIFICATION_EMAIL_TEMPLATE, PASSWORD_RESET_REQUEST_TEMPLATE, PASSWORD_RESET_SUCCESS_TEMPLATE, VERIFICATION_CODE_TEMPLATE }
