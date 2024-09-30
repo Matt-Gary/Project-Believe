@@ -26,6 +26,11 @@ module.exports = (sequelize, DataTypes) => {
         type: DataTypes.STRING,
         allowNull: true,
       },
+      visibility: {
+        type: DataTypes.ENUM('PUBLIC', 'PRIVATE'),
+        allowNull: false,
+        defaultValue: 'PRIVATE',
+      },
       createdAt: {
         type: DataTypes.DATE,
         allowNull: false,

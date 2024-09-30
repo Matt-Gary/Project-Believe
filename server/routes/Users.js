@@ -1,6 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const { Users, sequelize } = require('../models');
+const { Op } = require('sequelize');
 const bcrypt = require("bcrypt");
 const jwt = require("jsonwebtoken")
 const crypto = require('crypto')
@@ -10,6 +11,7 @@ const multer = require("multer")
 const path = require('path')
 const fs = require('fs') // To handle file system operations
 const sharp = require('sharp') //resizing photos
+const authorize = require('../middleware/authorize');
 
 // Multer configuration
 //<form action="/users/update-photo" method="POST" enctype="multipart/form-data">
@@ -36,7 +38,7 @@ const emailRegex = /^[\w-\.]+@([\w-]+\.)+[\w-]{2,4}$/;
 // Register a new user
 router.post("/register", async (req, res) => {
     // Extracting username, password, email, and matricula from the request body
-    const { username, password, email, matricula } = req.body;
+    const { username, password, email, matricula, role } = req.body;
 
     // Validate email format before proceeding
     if (!emailRegex.test(email)) {
@@ -66,7 +68,8 @@ router.post("/register", async (req, res) => {
             password: hashedPassword, // Storing the hashed password, not the plain text
             matricula: matricula,
             email: email,
-            createdAt: Date.now()
+            createdAt: Date.now(),
+            role: role
         });
         await sendWelcomeEmail(user.email, user.username)
         // Respond with success message
@@ -100,7 +103,13 @@ router.post("/login", async (req, res) => {
             return res.status(400).json({message: "Invalid Credenstials"})    
         }
         // Create a JSON Web Token (JWT) for the user
-        const token = jwt.sign({matricula: user.matricula}, "secretkey", {
+        const token = jwt.sign({
+            matricula: user.matricula, 
+            email: user.email,
+            username: user.username,
+            role: user.role 
+        },
+         "secretkey", {
             expiresIn: "1h" // Token will expire in 1 hour
         })
         //Set the token in a cookie
@@ -124,7 +133,7 @@ router.post("/logout", async (req, res) => {
     res.status(200).json({success: true, message: "Logged out succesfully"})
 
 })
-// Route to forgot password
+// Route to forgot passworddd
 router.post("/forgot-password", async (req, res) => {
     const { email } = req.body
     try {
@@ -182,8 +191,30 @@ router.post("/reset-password/:token", async (req, res) => {
         res.status(400).json({success: false, message: error.message})
     }
 })
+// New route to get all registered users
+router.get("/all-users", verifyToken, authorize(['ADMIN']), async (req, res) => {
+    try {
+        // Check if the requesting user is an admin
+        const requestingUser = await Users.findByPk(req.user.matricula);
+
+        // Fetch all users, excluding sensitive information
+        const users = await Users.findAll({
+            attributes: ['username', 'email', 'matricula', 'role', 'createdAt', 'updatedAt'],
+            where: {
+                matricula: {
+                    [Op.ne]: req.user.matricula // Exclude the requesting user
+                }
+            }
+        });
+
+        res.json({ users });
+    } catch (error) {
+        console.error("Error fetching all users:", error);
+        res.status(500).json({ message: "Server Error" });
+    }
+});
 // Route to get an existing user
-router.get("/userByMatricula", async (req, res) => {
+router.get("/userByMatricula", authorize(['ADMIN', 'USER']), async (req, res) => {
     // Extracting matricula from the request body
     const {matricula} = req.body;
     try {
@@ -204,7 +235,7 @@ router.get("/userByMatricula", async (req, res) => {
 })
 
 // Route to delete an existing user
-router.delete("/userByMatricula", async (req, res) => {
+router.delete("/userByMatricula", authorize(['ADMIN']), async (req, res) => {
     // Extracting matricula from the request body
     const {matricula} = req.body;
     try {
@@ -224,7 +255,7 @@ router.delete("/userByMatricula", async (req, res) => {
 })
 
 // Edit a existent user
-router.put("/userUpdateByMatricula", async (req, res) => {
+router.put("/userUpdateByMatricula", authorize(['ADMIN', 'USER']), async (req, res) => {
 
     const { username, email, matricula } = req.body;
 
@@ -283,7 +314,7 @@ router.put("/userUpdateByMatricula", async (req, res) => {
 });
 
 // Accessible only with a valid JWT token
-router.post("/userChangePassword", verifyToken, async (req, res) => {
+router.post("/userChangePassword", verifyToken, authorize(['ADMIN', 'USER']), async (req, res) => {
     try {
         // Get user body
         const {oldPassword,newPassword} = req.body;
@@ -328,7 +359,7 @@ router.post("/userChangePassword", verifyToken, async (req, res) => {
 module.exports = router;
 
 // Protected route to get user info, accessible only with a valid JWT token
-router.get("/userinfo", verifyToken, async (req, res) => {
+router.get("/userinfo", verifyToken, authorize(['ADMIN']), async (req, res) => {
     try {
         // Find the user by their matricula from the decoded JWT data
         const user = await Users.findByPk(req.user.matricula)
@@ -342,7 +373,7 @@ router.get("/userinfo", verifyToken, async (req, res) => {
     }
 })
 
-router.post("/update-photo", verifyToken, upload.single('image'), async (req, res) => {
+router.post("/update-photo", verifyToken, authorize(['ADMIN', 'USER']), upload.single('image'), async (req, res) => {
     const userMatricula = req.user.matricula;
 
     // Ensure an image is uploaded
@@ -397,7 +428,7 @@ router.post("/update-photo", verifyToken, upload.single('image'), async (req, re
     }
 });
 // Route to delete profile photo
-router.delete("/delete-profile-photo", verifyToken, async (req, res) => {
+router.delete("/delete-profile-photo", verifyToken, authorize(['ADMIN', 'USER']), async (req, res) => {
     const userMatricula = req.user.matricula;
 
     try {
