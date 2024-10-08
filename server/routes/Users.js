@@ -219,7 +219,7 @@ router.get("/all-users", verifyToken, authorize(['ADMIN']), async (req, res) => 
     }
 });
 // Route to get an existing user
-router.get("/userByMatricula", authorize(['ADMIN', 'USER']), async (req, res) => {
+router.get("/userByMatricula", verifyToken, authorize(['ADMIN', 'USER']), async (req, res) => {
     // Extracting matricula from the request body
     const {matricula} = req.body;
     try {
@@ -240,7 +240,7 @@ router.get("/userByMatricula", authorize(['ADMIN', 'USER']), async (req, res) =>
 })
 
 // Route to delete an existing user
-router.delete("/userByMatricula", authorize(['ADMIN']), async (req, res) => {
+router.delete("/userByMatricula", verifyToken, authorize(['ADMIN']), async (req, res) => {
     // Extracting matricula from the request body
     const {matricula} = req.body;
     try {
@@ -260,7 +260,7 @@ router.delete("/userByMatricula", authorize(['ADMIN']), async (req, res) => {
 })
 
 // Edit a existent user
-router.put("/userUpdateByMatricula", authorize(['ADMIN', 'USER']), async (req, res) => {
+router.put("/userUpdateByMatricula", verifyToken, authorize(['ADMIN', 'USER']), async (req, res) => {
 
     const { username, email, matricula } = req.body;
 

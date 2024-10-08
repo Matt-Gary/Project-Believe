@@ -15,7 +15,7 @@ function verifyToken(req, res, next) {
     try {
         // Verify the token and extract the user data
         const decoded = jwt.verify(token, process.env.SECRET_KEY);
-
+        console.log('Decoded token data:', decoded); // Log decoded data
         // Attach the decoded user data (including role) to the request object
         req.user = {
             matricula: decoded.matricula, // User's unique identifier
