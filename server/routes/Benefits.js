@@ -1,10 +1,10 @@
 const express = require('express');
 const crypto = require('crypto');
 const router = express.Router();
-const { sendVerificationCode  } = require('../mailtrap/emails');
 const authorize = require('../middleware/authorize');
 const { Partnerships, Users } = require('../models');
 const verifyToken = require('../middleware/verifyToken'); // Import the middleware
+const { sendWhatsappMessageToCompany, sendWhatsappMessageToUser } =require('../middleware/whatsapp')
 
 // POST /benefits/claim/:benefitId
 router.post('/claim/:benefitId', verifyToken, authorize(['USER', 'ADMIN']), async (req, res) => {
@@ -50,18 +50,70 @@ router.post('/claim/:benefitId', verifyToken, authorize(['USER', 'ADMIN']), asyn
     //     console.error('Error in benefit claim:', err);
     //     res.status(500).json({ message: 'An error occurred', error: err.message });
     // }
+    try {
+      const { benefitId } = req.params;
+      const userMatricula = req.user.matricula; // Extracting user matricula from token
+      const userPhoneNumber = req.user.phoneNumber; // Extracting phoneNumber from token
+
+      // Fetch the user from the database
+      const user = await Users.findOne({ where: { matricula: userMatricula } });
+
+      if (!user) {
+          return res.status(404).json({ message: 'User not found' });
+      }
+
+      const userEmail = user.email;
+      const userName = user.username;
+
+      console.log('User data:', { userEmail, userName, userPhoneNumber, benefitId });
+
+      // Fetch the partnership related to the benefit
+      const partnership = await Partnerships.findByPk(benefitId);
+      if (!partnership) {
+          return res.status(404).json({ message: 'Benefit not found' });
+      }
+
+      console.log('Partnership data:', partnership);
+
+      // Make sure companyPhone is not undefined
+      if (!partnership.phoneNumber) {
+          return res.status(400).json({ message: 'Company phone number is missing' });
+      }
+
+      // Generate a 6-digit random verification code
+      const verificationCode = Math.floor(100000 + Math.random() * 900000).toString();
+
+      console.log('Sending verification code:', {
+          userPhoneNumber,
+          companyPhone: partnership.phoneNumber,
+          verificationCode,
+          userName,
+          companyName: partnership.companyName
+      });
+
+      // Send verification code to both the user and the company (via SMS/WhatsApp or any other system)
+      await sendWhatsappMessageToUser(userPhoneNumber, verificationCode);
+      await sendWhatsappMessageToCompany(partnership.phoneNumber, verificationCode);
+
+      res.status(200).json({ message: 'Verification code sent to both user and company' });
+  } catch (err) {
+      console.error('Error in benefit claim:', err);
+      res.status(500).json({ message: 'An error occurred', error: err.message });
+  }
 });
+
 
 
 // CREATE - Add a new partnership
 router.post('/', verifyToken, authorize(['ADMIN']), async (req, res) => {
   try {
-    const { companyName, companyEmail, discount, description } = req.body;
+    const { companyName, companyEmail, discount, description, phoneNumber } = req.body;
     const newPartnership = await Partnerships.create({
       companyName,
       companyEmail,
       discount,
       description,
+      phoneNumber,
       createdAt: new Date(),
       updatedAt: new Date()
     });

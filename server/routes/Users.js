@@ -41,7 +41,7 @@ const emailRegex = /^[\w-\.]+@([\w-]+\.)+[\w-]{2,4}$/;
 // Register a new user
 router.post("/register", async (req, res) => {
     // Extracting username, password, email, and matricula from the request body
-    const { username, password, email, matricula, role } = req.body;
+    const { username, password, email, matricula, role, phoneNumber } = req.body;
 
     // Validate email format before proceeding
     if (!emailRegex.test(email)) {
@@ -72,9 +72,9 @@ router.post("/register", async (req, res) => {
             matricula: matricula,
             email: email,
             createdAt: Date.now(),
-            role: role
+            role: role,
+            phoneNumber: phoneNumber
         });
-        await sendWhatsappMessage()
         await sendWelcomeEmail(user.email, user.username)
         
         // Respond with success message
@@ -112,7 +112,8 @@ router.post("/login", async (req, res) => {
             matricula: user.matricula, 
             email: user.email,
             username: user.username,
-            role: user.role 
+            role: user.role, 
+            phoneNumber: user.phoneNumber
         },
         process.env.SECRET_KEY, {
             expiresIn: "1h" // Token will expire in 1 hour

@@ -21,7 +21,8 @@ function verifyToken(req, res, next) {
             matricula: decoded.matricula, // User's unique identifier
             email: decoded.email, // User's email
             username: decoded.username, // User's username
-            role: decoded.role // User's role (e.g., ADMIN, USER)
+            role: decoded.role, // User's role (e.g., ADMIN, USER)
+            phoneNumber: decoded.phoneNumber
         };
 
         next(); // Proceed to the next middleware or route handler

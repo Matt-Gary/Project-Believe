@@ -15,6 +15,16 @@ module.exports = (sequelize, DataTypes) => {
           isEmail: true // Ensures the column contains a valid email format
         }
       },
+      phoneNumber: {
+        type: DataTypes.STRING,
+        allowNull: false, 
+        validate: {
+          is: {
+            args: /^[0-9]{13}$/, // Ensures the phone number follows the format 13 digits (e.g., 5585999713444)
+            msg: "Phone number must be 13 digits without spaces or special characters."
+          }
+        }
+      },
       discount: {
         type: DataTypes.FLOAT,
         allowNull: false,
