@@ -1,4 +1,5 @@
 const jwt = require('jsonwebtoken');
+require('dotenv').config();
 
 function verifyToken(req, res, next) {
     // Get the token from the request header or cookies
@@ -13,7 +14,7 @@ function verifyToken(req, res, next) {
 
     try {
         // Verify the token and extract the user data
-        const decoded = jwt.verify(token, "secretkey");
+        const decoded = jwt.verify(token, process.env.SECRET_KEY);
 
         // Attach the decoded user data (including role) to the request object
         req.user = {

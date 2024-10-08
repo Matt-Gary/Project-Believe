@@ -12,6 +12,9 @@ const path = require('path')
 const fs = require('fs') // To handle file system operations
 const sharp = require('sharp') //resizing photos
 const authorize = require('../middleware/authorize');
+const { sendWhatsappMessage } = require('../middleware/whatsapp');
+require('dotenv').config();
+
 
 // Multer configuration
 //<form action="/users/update-photo" method="POST" enctype="multipart/form-data">
@@ -71,7 +74,9 @@ router.post("/register", async (req, res) => {
             createdAt: Date.now(),
             role: role
         });
+        await sendWhatsappMessage()
         await sendWelcomeEmail(user.email, user.username)
+        
         // Respond with success message
         return res.json("User registered successfully");
 
@@ -109,7 +114,7 @@ router.post("/login", async (req, res) => {
             username: user.username,
             role: user.role 
         },
-         "secretkey", {
+        process.env.SECRET_KEY, {
             expiresIn: "1h" // Token will expire in 1 hour
         })
         //Set the token in a cookie
