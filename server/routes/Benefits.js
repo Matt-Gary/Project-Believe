@@ -92,8 +92,8 @@ router.post('/claim/:benefitId', verifyToken, authorize(['USER', 'ADMIN']), asyn
       });
 
       // Send verification code to both the user and the company (via SMS/WhatsApp or any other system)
-      await sendWhatsappMessageToUser(userPhoneNumber, verificationCode);
-      await sendWhatsappMessageToCompany(partnership.phoneNumber, verificationCode);
+      await sendWhatsappMessageToUser(userPhoneNumber, verificationCode, partnership.companyName);
+      await sendWhatsappMessageToCompany(partnership.phoneNumber, verificationCode, userName);
 
       res.status(200).json({ message: 'Verification code sent to both user and company' });
   } catch (err) {

@@ -1,7 +1,7 @@
 const axios = require('axios');
 require('dotenv').config();
 
-async function sendWhatsappMessageToUser(phoneNumber, verificationCode) {
+async function sendWhatsappMessageToUser(phoneNumber, verificationCode, companyName) {
     try {
         const response = await axios({
             url: 'https://graph.facebook.com/v20.0/409047158966434/messages', // Ensure this URL and phone number ID is correct
@@ -15,27 +15,22 @@ async function sendWhatsappMessageToUser(phoneNumber, verificationCode) {
                 to: phoneNumber, // Replace with recipient phone number in the correct format
                 type: 'template',
                 template: {
-                    name: 'template_codigo', // Ensure template name is correctly set
+                    name: 'desconto_user', // Ensure template name is correctly set
                     language: {
-                        code: 'pt_PT' // Language code for the template
+                        code: 'pt_BR' // Language code for the template
                     },
                     components: [
-                        {
-                         type: 'button',
-                         sub_type: 'url',
-                         index: '0',
-                         parameters: [{
-                            type: 'text',
-                            text: verificationCode
-                        }]
-                        },
                         {
                         type: 'body',
                         parameters: [
                             {
                                 type: 'text', // This should be 'text' to match your example
                                 text: verificationCode // The verification code or parameter to send
-                            }
+                            },
+                            {
+                                type: 'text', // This should be 'text' to match your example
+                                text: companyName,
+                            },
                         ]
                     }]
                 },
@@ -50,7 +45,7 @@ async function sendWhatsappMessageToUser(phoneNumber, verificationCode) {
     }
 }
 
-async function sendWhatsappMessageToCompany(phoneNumber, verificationCode) {
+async function sendWhatsappMessageToCompany(phoneNumber, verificationCode, userName) {
     try {
         const response = await axios({
             url: 'https://graph.facebook.com/v20.0/409047158966434/messages', // Ensure this URL and phone number ID is correct
@@ -64,18 +59,16 @@ async function sendWhatsappMessageToCompany(phoneNumber, verificationCode) {
                 to: phoneNumber, // Replace with recipient phone number in the correct format
                 type: 'template',
                 template: {
-                    name: 'template_codigo', // Ensure template name is correctly set
+                    name: 'desconto_company', // Ensure template name is correctly set
                     language: {
-                        code: 'pt_PT' // Language code for the template
+                        code: 'pt_BR' // Language code for the template
                     },
                     components: [
                         {
-                         type: 'button',
-                         sub_type: 'url',
-                         index: '0',
+                         type: 'header',
                          parameters: [{
                             type: 'text',
-                            text: verificationCode
+                            text: userName
                         }]
                         },
                         {
