@@ -1,6 +1,7 @@
 const { MailtrapClient } = require("mailtrap");
+require('dotenv').config();
 
-const TOKEN = "ef95286856cae7fa957de202c0684985";
+const TOKEN =  process.env.MAILTRAP_TOKEN;
 
 const mailtrapClient = new MailtrapClient({
   token: TOKEN,

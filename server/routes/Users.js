@@ -12,6 +12,9 @@ const path = require('path')
 const fs = require('fs') // To handle file system operations
 const sharp = require('sharp') //resizing photos
 const authorize = require('../middleware/authorize');
+const { sendWhatsappMessage } = require('../middleware/whatsapp');
+require('dotenv').config();
+
 
 // Multer configuration
 //<form action="/users/update-photo" method="POST" enctype="multipart/form-data">
@@ -38,7 +41,7 @@ const emailRegex = /^[\w-\.]+@([\w-]+\.)+[\w-]{2,4}$/;
 // Register a new user
 router.post("/register", async (req, res) => {
     // Extracting username, password, email, and matricula from the request body
-    const { username, password, email, matricula, role } = req.body;
+    const { username, password, email, matricula, role, phoneNumber } = req.body;
 
     // Validate email format before proceeding
     if (!emailRegex.test(email)) {
@@ -69,9 +72,11 @@ router.post("/register", async (req, res) => {
             matricula: matricula,
             email: email,
             createdAt: Date.now(),
-            role: role
+            role: role,
+            phoneNumber: phoneNumber
         });
         await sendWelcomeEmail(user.email, user.username)
+        
         // Respond with success message
         return res.json("User registered successfully");
 
@@ -107,9 +112,10 @@ router.post("/login", async (req, res) => {
             matricula: user.matricula, 
             email: user.email,
             username: user.username,
-            role: user.role 
+            role: user.role, 
+            phoneNumber: user.phoneNumber
         },
-         "secretkey", {
+        process.env.SECRET_KEY, {
             expiresIn: "1h" // Token will expire in 1 hour
         })
         //Set the token in a cookie
@@ -214,7 +220,7 @@ router.get("/all-users", verifyToken, authorize(['ADMIN']), async (req, res) => 
     }
 });
 // Route to get an existing user
-router.get("/userByMatricula", authorize(['ADMIN', 'USER']), async (req, res) => {
+router.get("/userByMatricula", verifyToken, authorize(['ADMIN', 'USER']), async (req, res) => {
     // Extracting matricula from the request body
     const {matricula} = req.body;
     try {
@@ -235,7 +241,7 @@ router.get("/userByMatricula", authorize(['ADMIN', 'USER']), async (req, res) =>
 })
 
 // Route to delete an existing user
-router.delete("/userByMatricula", authorize(['ADMIN']), async (req, res) => {
+router.delete("/userByMatricula", verifyToken, authorize(['ADMIN']), async (req, res) => {
     // Extracting matricula from the request body
     const {matricula} = req.body;
     try {
@@ -255,7 +261,7 @@ router.delete("/userByMatricula", authorize(['ADMIN']), async (req, res) => {
 })
 
 // Edit a existent user
-router.put("/userUpdateByMatricula", authorize(['ADMIN', 'USER']), async (req, res) => {
+router.put("/userUpdateByMatricula", verifyToken, authorize(['ADMIN', 'USER']), async (req, res) => {
 
     const { username, email, matricula } = req.body;
 
