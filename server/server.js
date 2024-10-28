@@ -27,3 +27,5 @@ db.sequelize.sync().then(() => {
         console.log("Server on localhost:4000");
     });
 });
+
+module.exports = app
