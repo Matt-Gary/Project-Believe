@@ -19,6 +19,9 @@ app.use('/gallery', eventRoutes);
 const benefitsRoutes = require('./routes/Benefits');
 app.use('/benefits', benefitsRoutes);
 
+const tutorialsRouter = require('./routes/Tutorials');
+app.use('/tutorial', tutorialsRouter);
+
 // Uploading photos
 app.use('/uploades/ProfileImages', express.static(path.join(__dirname, 'ProfileImages')))
 
