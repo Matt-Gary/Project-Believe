@@ -26,8 +26,9 @@ app.use('/tutorial', tutorialsRouter);
 app.use('/uploades/ProfileImages', express.static(path.join(__dirname, 'ProfileImages')))
 
 db.sequelize.sync().then(() => {
-    app.listen(4000, () => {
-        console.log("Server on localhost:4000");
+    const PORT = process.env.PORT || 4000;
+    app.listen(PORT, () => {
+        console.log(`Server running on port ${PORT}`);
     });
 });
 
