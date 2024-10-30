@@ -14,10 +14,10 @@
     "dialect": "postgres"
   },
   "production": {
-    "username": "root",
-    "password": null,
-    "database": "database_production",
-    "host": "127.0.0.1",
+    "username": "believe_project_owner",
+    "password": "tBq4P2lELzvZ",
+    "database": "believe_project",
+    "host": "ep-crimson-firefly-a57056qt.us-east-2.aws.neon.tech",
     "dialect": "postgres"
   }
 }
