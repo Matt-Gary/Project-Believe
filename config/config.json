@@ -1,11 +1,17 @@
 {
   "development": {
-    "username": "postgres",
-    "password": "Mineralna1!",
+    "username": "believe_project_owner",
+    "password": "7bsei2mwEcqk",
     "database": "believe_project",
-    "host": "localhost",
-    "dialect": "postgres"
-  },
+    "host": "ep-crimson-firefly-a57056qt.us-east-2.aws.neon.tech",
+    "dialect": "postgres",
+    "ssl": true,
+    "dialectOptions": {
+      "ssl": {
+        "require": true,
+        "rejectUnauthorized": false
+      }
+  }},
   "test": {
     "username": "root",
     "password": null,
@@ -15,9 +21,16 @@
   },
   "production": {
     "username": "believe_project_owner",
-    "password": "tBq4P2lELzvZ",
+    "password": "7bsei2mwEcqk",
     "database": "believe_project",
     "host": "ep-crimson-firefly-a57056qt.us-east-2.aws.neon.tech",
-    "dialect": "postgres"
+    "dialect": "postgres",
+    "ssl": true,
+    "dialectOptions": {
+      "ssl": {
+        "require": true,
+        "rejectUnauthorized": false
+      }
+  }
   }
 }
