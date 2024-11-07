@@ -9,10 +9,19 @@ const app = express();
 app.use(express.json());
 app.use(cors());
 
-app.use(cors({
-    origin: 'http://localhost:5173', // Or your deployed front-end URL
-    credentials: true // This is important if you’re using cookies for authentication
-}));
+app.use((req, res, next) => {
+    res.header(
+    "Access-Control-Allow-Origin",
+    "https://localhost:5173"
+    );
+    res.header("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS");
+    res.header("Access-Control-Allow-Headers", "Content-Type, Authorization");
+    res.header("Access-Control-Allow-Credentials", true);
+    
+    console.log("Request received:", req.method, req.url);
+    
+    next();
+    });
 
 app.use(cookieParser())
 //Creating path for our registration
