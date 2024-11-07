@@ -7,7 +7,6 @@ require('dotenv').config()
 
 const app = express();
 app.use(express.json());
-app.use(cors());
 
 app.use((req, res, next) => {
     res.header("Access-Control-Allow-Origin", "http://localhost:5173"); // Ensure this matches your frontend's URL
@@ -22,7 +21,7 @@ app.use((req, res, next) => {
     console.log("Request received:", req.method, req.url);
     next();
 });
-
+app.use(cors());
 app.use(cookieParser())
 //Creating path for our registration
 
