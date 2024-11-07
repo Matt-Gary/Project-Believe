@@ -121,7 +121,7 @@ router.post("/login", async (req, res) => {
         //Set the token in a cookie
         res.cookie("accessToken", token, {
             httpOnly: true, //Prevents JavaScripts access
-            secure: process.env.NODE_ENV === "production", // Use HTTPS in production
+            secure: true, // Use HTTPS in production
             sameSite: "Strict", // Prevents CSRF attacks
             maxAge: 3600000 // 1hour
         })
