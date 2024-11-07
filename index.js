@@ -8,12 +8,15 @@ require('dotenv').config()
 const app = express();
 app.use(express.json());
 app.use(cors());
-app.use(cookieParser())
-//Creating path for our registration
+
 app.use(cors({
     origin: 'http://localhost:5173', // Or your deployed front-end URL
     credentials: true // This is important if you’re using cookies for authentication
 }));
+
+app.use(cookieParser())
+//Creating path for our registration
+
 
 const usersRouter = require('./routes/Users');
 app.use('/auth', usersRouter);
