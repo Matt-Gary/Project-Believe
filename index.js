@@ -33,7 +33,7 @@ const tutorialsRouter = require('./routes/Tutorials');
 app.use('/tutorial', tutorialsRouter);
 
 // Uploading photos
-app.use('../uploades/ProfileImages', express.static(path.join(__dirname, 'ProfileImages')))
+app.use('../uploads/ProfileImages', express.static(path.join(__dirname, 'ProfileImages')))
 
 db.sequelize.sync().then(() => {
     const PORT = process.env.PORT || 4000;
