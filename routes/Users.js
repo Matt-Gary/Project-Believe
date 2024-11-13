@@ -90,10 +90,7 @@ router.post("/register", async (req, res) => {
 router.post("/login", async (req, res) => {
     // Extracting email, password, and matricula from the request body
     const { email, password, matricula } = req.body;
-    // Validate email format before proceeding
-    if (!emailRegex.test(email)) {
-        return res.status(400).json({error: "Invalid email format"})
-    }
+
     try {
         // Find the user in the database by their email
         const user = await Users.findOne({where: {email}})
