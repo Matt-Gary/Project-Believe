@@ -157,7 +157,7 @@ router.post("/forgot-password", async (req, res) => {
 
         await user.save()
         //send email with a link to reset a password 
-        await sendPasswordResetEmail(user.email, `https://project-believe.onrender.com/reset-password/${resetToken}`, user.username)
+        await sendPasswordResetEmail(user.email, `http://localhost:5173/reset-password/${resetToken}`, user.username)
 
         res.status(200).json({success: true, message: "Password reset link sent to your email"})
 
@@ -167,15 +167,16 @@ router.post("/forgot-password", async (req, res) => {
     }
 })
 // Reset password route
-router.post("/reset-password/:token", async (req, res) => {
-    try{ 
-        const {token} = req.params
-        const {password} = req.body
+router.post("/reset-password/", async (req, res) => {
+    const { token, password } = req.body;
 
-        const user = await Users.findOne ({
-            resetPasswordCode: token,
-            resetPasswordExpiresAt: {$gt: Date.now()}
-        })
+    try {
+      const user = await Users.findOne({
+        where: {
+          resetPasswordCode: token,
+          resetPasswordExpiresAt: { [Op.gt]: Date.now() } // Token must be valid and not expired
+        }
+      });
         if(!user) {
             return res.status(400).json({success: false, message: "Invalid or expired reset code"})
         }
