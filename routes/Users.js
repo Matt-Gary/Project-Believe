@@ -157,14 +157,13 @@ router.post("/forgot-password", async (req, res) => {
 
         await user.save()
         //send email with a link to reset a password 
-        await sendPasswordResetEmail(user.email, `${process.env.URL}/reset-password/${resetToken}`, user.username)
+        await sendPasswordResetEmail(user.email, `https://project-believe.onrender.com/reset-password/${resetToken}`, user.username)
 
         res.status(200).json({success: true, message: "Password reset link sent to your email"})
 
     } catch (error) {
         console.log("Error in forgotPassword", error)
         res.status(400).json({success: false, message: error.message})
-
     }
 })
 // Reset password route
