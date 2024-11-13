@@ -82,7 +82,7 @@ router.post("/register", async (req, res) => {
 
     } catch (error) {
         console.error("Error registering user:", error);
-        return res.status(500).json({ error: "An error occurred while registering the user." });
+        return res.status(500).json({ error: "An error occurred while registering the user.", error });
     }
 });
 
@@ -157,7 +157,7 @@ router.post("/forgot-password", async (req, res) => {
 
         await user.save()
         //send email with a link to reset a password 
-        await sendPasswordResetEmail(user.email, `http://localhost:4000/reset-password/${resetToken}`, user.username)
+        await sendPasswordResetEmail(user.email, `process.env.URL/${resetToken}`, user.username)
 
         res.status(200).json({success: true, message: "Password reset link sent to your email"})
 
