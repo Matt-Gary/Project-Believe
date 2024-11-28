@@ -75,7 +75,7 @@ router.post("/register", async (req, res) => {
             role: role,
             phoneNumber: phoneNumber
         });
-        await sendWelcomeEmail(user.email, user.username)
+        // await sendWelcomeEmail(user.email, user.username)
         
         // Respond with success message
         return res.json("User registered successfully");
