@@ -119,7 +119,7 @@ router.post("/login", async (req, res) => {
         res.cookie("accessToken", token, {
             httpOnly: true, //Prevents JavaScripts access
             secure: true, // Use HTTPS in production
-            sameSite: "Strict", // Prevents CSRF attacks
+            sameSite: "None", // Prevents CSRF attacks
             maxAge: 3600000 // 1hour
         })
         res.json({token, message: "Login succesfully"})
