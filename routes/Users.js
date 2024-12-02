@@ -48,6 +48,15 @@ router.post("/register", async (req, res) => {
         return res.status(400).json({error: "Formato de e-mail inválido"})
     }
 
+    // Validate phone number format (must be 11 digits)
+    const phoneRegex = /^\d{11}$/;
+    if (!phoneRegex.test(phoneNumber)) {
+        return res.status(400).json({ error: "Número de telefone inválido. Deve conter 11 dígitos." });
+    }
+
+    // Format the phone number to include +55 country code
+    const formattedPhoneNumber = `+55${phoneNumber}`;
+
     try {
         //Check if a user with the same email already exists
         const existingUser = await Users.findOne({ where: { email: email } });
@@ -73,7 +82,7 @@ router.post("/register", async (req, res) => {
             email: email,
             createdAt: Date.now(),
             role: role,
-            phoneNumber: phoneNumber
+            phoneNumber: formattedPhoneNumber 
         });
         // await sendWelcomeEmail(user.email, user.username)
         
