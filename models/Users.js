@@ -40,7 +40,7 @@ module.exports = (sequelize, DataTypes) => {
         allowNull: false, 
         validate: {
           is: {
-            args: /^[0-9]{11}$/, // Ensures the phone number follows the format 11 digits (e.g., 558599973444)
+            args: /^[0-9]{13}$/, // Ensures the phone number follows the format 11 digits (e.g., 558599973444)
             msg: "O número de telefone deve ter 11 dígitos, sem espaços ou caracteres especiais."
           }
         }

@@ -55,7 +55,7 @@ router.post("/register", async (req, res) => {
     }
 
     // Format the phone number to include +55 country code
-    const formattedPhoneNumber = `+55${phoneNumber}`;
+    const formattedPhoneNumber = `55${phoneNumber}`;
 
     try {
         //Check if a user with the same email already exists
