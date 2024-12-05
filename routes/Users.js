@@ -45,8 +45,17 @@ router.post("/register", async (req, res) => {
 
     // Validate email format before proceeding
     if (!emailRegex.test(email)) {
-        return res.status(400).json({error: "Invalid email format"})
+        return res.status(400).json({error: "Formato de e-mail inválido"})
     }
+
+    // Validate phone number format (must be 11 digits)
+    const phoneRegex = /^\d{11}$/;
+    if (!phoneRegex.test(phoneNumber)) {
+        return res.status(400).json({ error: "Número de telefone inválido. Deve conter 11 dígitos." });
+    }
+
+    // Format the phone number to include +55 country code
+    const formattedPhoneNumber = `55${phoneNumber}`;
 
     try {
         //Check if a user with the same email already exists
@@ -55,11 +64,11 @@ router.post("/register", async (req, res) => {
         const existingMatricula = await Users.findOne({ where: { matricula: matricula } });
         // Validation: Check if matricula is already in use
         if (existingMatricula) {
-            return res.status(400).json({error: "Matricula is already used"})
+            return res.status(400).json({error: "Matrícula já é usada"})
         }
         // Validation: Check if the email is already registered
         if (existingUser) {
-            return res.status(400).json({ error: "User already exists" });
+            return res.status(400).json({ error: "O usuário já existe" });
         }
 
         // Hash the password before storing it in the database
@@ -73,16 +82,16 @@ router.post("/register", async (req, res) => {
             email: email,
             createdAt: Date.now(),
             role: role,
-            phoneNumber: phoneNumber
+            phoneNumber: formattedPhoneNumber 
         });
-        await sendWelcomeEmail(user.email, user.username)
+        // await sendWelcomeEmail(user.email, user.username)
         
         // Respond with success message
         return res.json("User registered successfully");
 
     } catch (error) {
         console.error("Error registering user:", error);
-        return res.status(500).json({ error: "An error occurred while registering the user." });
+        return res.status(500).json({ error: "An error occurred while registering the user.", error });
     }
 });
 
@@ -90,22 +99,19 @@ router.post("/register", async (req, res) => {
 router.post("/login", async (req, res) => {
     // Extracting email, password, and matricula from the request body
     const { email, password, matricula } = req.body;
-    // Validate email format before proceeding
-    if (!emailRegex.test(email)) {
-        return res.status(400).json({error: "Invalid email format"})
-    }
+
     try {
         // Find the user in the database by their email
         const user = await Users.findOne({where: {email}})
         // Validation: Check if the user exists
         if(!user) {
-            return res.status(400).json({message: "Invalid Credenstials"})    
+            return res.status(400).json({message: "Credenciais inválidas"})    
         }
         // Compare the provided password with the stored hashed password
         const isPasswordMatch = await bcrypt.compare(password, user.password)
         // Validation: Check if the password matches
         if(!isPasswordMatch) {
-            return res.status(400).json({message: "Invalid Credenstials"})    
+            return res.status(400).json({message: "Credenciais inválidas"})    
         }
         // Create a JSON Web Token (JWT) for the user
         const token = jwt.sign({
@@ -121,8 +127,8 @@ router.post("/login", async (req, res) => {
         //Set the token in a cookie
         res.cookie("accessToken", token, {
             httpOnly: true, //Prevents JavaScripts access
-            secure: process.env.NODE_ENV === "production", // Use HTTPS in production
-            sameSite: "Strict", // Prevents CSRF attacks
+            secure: true, // Use HTTPS in production
+            sameSite: "None", // Prevents CSRF attacks
             maxAge: 3600000 // 1hour
         })
         res.json({token, message: "Login succesfully"})
@@ -157,26 +163,26 @@ router.post("/forgot-password", async (req, res) => {
 
         await user.save()
         //send email with a link to reset a password 
-        await sendPasswordResetEmail(user.email, `http://localhost:4000/reset-password/${resetToken}`, user.username)
+        await sendPasswordResetEmail(user.email, `http://localhost:5173/reset-password/${resetToken}`, user.username)
 
         res.status(200).json({success: true, message: "Password reset link sent to your email"})
 
     } catch (error) {
         console.log("Error in forgotPassword", error)
         res.status(400).json({success: false, message: error.message})
-
     }
 })
 // Reset password route
-router.post("/reset-password/:token", async (req, res) => {
-    try{ 
-        const {token} = req.params
-        const {password} = req.body
+router.post("/reset-password/", async (req, res) => {
+    const { token, password } = req.body;
 
-        const user = await Users.findOne ({
-            resetPasswordCode: token,
-            resetPasswordExpiresAt: {$gt: Date.now()}
-        })
+    try {
+      const user = await Users.findOne({
+        where: {
+          resetPasswordCode: token,
+          resetPasswordExpiresAt: { [Op.gt]: Date.now() } // Token must be valid and not expired
+        }
+      });
         if(!user) {
             return res.status(400).json({success: false, message: "Invalid or expired reset code"})
         }

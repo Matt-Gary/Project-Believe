@@ -6,10 +6,20 @@ const path = require('path')
 require('dotenv').config()
 
 const app = express();
+app.use(cors({
+    origin: function (origin, callback) {
+        // Allow any origin
+        callback(null, true);
+    },
+    methods: ["GET", "PUT", "POST", "DELETE"],
+    allowedHeaders: ["Content-Type", "Authorization"],
+    credentials: true // Allows cookies or other credentials to be sent
+}));
 app.use(express.json());
-app.use(cors());
 app.use(cookieParser())
 //Creating path for our registration
+
+
 const usersRouter = require('./routes/Users');
 app.use('/auth', usersRouter);
 
@@ -23,11 +33,12 @@ const tutorialsRouter = require('./routes/Tutorials');
 app.use('/tutorial', tutorialsRouter);
 
 // Uploading photos
-app.use('/uploades/ProfileImages', express.static(path.join(__dirname, 'ProfileImages')))
+app.use('../uploads/ProfileImages', express.static(path.join(__dirname, 'ProfileImages')))
 
 db.sequelize.sync().then(() => {
-    app.listen(4000, () => {
-        console.log("Server on localhost:4000");
+    const PORT = process.env.PORT || 4000;
+    app.listen(PORT, () => {
+        console.log(`Server running on port ${PORT}`);
     });
 });
 
