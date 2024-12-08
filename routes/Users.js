@@ -15,6 +15,7 @@ const { google } = require('googleapis'); //google DRIVE API
 const sharp = require('sharp') //resizing photos
 const authorize = require('../middleware/authorize');
 const { sendWhatsappMessage } = require('../middleware/whatsapp');
+const axios = require('axios'); 
 require('dotenv').config();
 
 
@@ -532,29 +533,44 @@ router.delete('/delete-profilephoto', verifyToken, authorize(['ADMIN', 'USER']),
 });
 router.get('/profilephoto', verifyToken, authorize(['ADMIN', 'USER']), async (req, res) => {
     const userMatricula = req.user.matricula;
-
+  
     try {
-        // Find the user by matricula
-        const user = await Users.findOne({ where: { matricula: userMatricula } });
-
-        if (!user) {
-            return res.status(404).json({ message: "User not found" });
-        }
-
-        // Check if the user has a profile photo
-        if (!user.profilePhoto) {
-            return res.status(400).json({ message: "No profile photo found" });
-        }
-
-        const fileUrl = `https://drive.google.com/uc?id=${user.profilePhoto}`;
-
-        // Send the profile photo URL back to the client
-        res.status(200).json({ profilePhotoUrl: fileUrl });
-
+      // Find the user by matricula
+      const user = await Users.findOne({ where: { matricula: userMatricula } });
+  
+      if (!user) {
+        return res.status(404).json({ message: "User not found" });
+      }
+  
+      // Check if the user has a profile photo
+      if (!user.profilePhoto) {
+        return res.status(400).json({ message: "No profile photo found" });
+      }
+  
+      const fileId = user.profilePhoto;
+  
+      // Fetch the image data from Google Drive
+      const response = await axios.get(`https://drive.google.com/uc?export=download&id=${fileId}`, {
+        responseType: 'stream',
+      });
+  
+      // Set appropriate headers
+      res.set('Content-Type', response.headers['content-type']);
+  
+      // Stream the image data directly to the client
+      response.data.pipe(res);
+  
     } catch (error) {
-        console.error("Error fetching profile photo:", error);
-        res.status(500).json({ message: "An error occurred while fetching the profile photo." });
+      console.error("Error fetching profile photo:", error);
+  
+      if (error.response && error.response.status === 404) {
+        // Handle Google Drive file not found error
+        return res.status(404).json({ message: "Profile photo not found in Google Drive." });
+      }
+  
+      res.status(500).json({ message: "An error occurred while fetching the profile photo." });
     }
-});
+  });
+  
 
 module.exports = router;
