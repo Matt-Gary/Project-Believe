@@ -1,23 +1,44 @@
 const express = require('express');
 const router = express.Router();
-const { Events, Photos } = require('../models'); // Assuming your models are in the models directory
+const { Events, Photos, sequelize } = require('../models'); // Assuming your models are in the models directory
 const multer = require('multer');
 const path = require('path');
 const verifyToken = require('../middleware/verifyToken'); // Import the middleware
 const fs = require('fs')
+const stream = require('stream')
+const { google } = require('googleapis'); //google DRIVE API
 const authorize = require('../middleware/authorize'); //authorization middleware
+const axios = require('axios'); 
 
-// Configure Multer storage for photo uploads
-const storage = multer.diskStorage({
-  destination: (req, file, cb) => {
-    cb(null, 'uploads/photos/'); // Folder to store uploaded photos
-  },
-  filename: (req, file, cb) => {
-    cb(null, Date.now() + path.extname(file.originalname)); // Use timestamp to prevent duplicate names
-  }
-});
+// // Configure Multer storage for photo uploads
+// const storage = multer.diskStorage({
+//   destination: (req, file, cb) => {
+//     cb(null, 'uploads/photos/'); // Folder to store uploaded photos
+//   },
+//   filename: (req, file, cb) => {
+//     cb(null, Date.now() + path.extname(file.originalname)); // Use timestamp to prevent duplicate names
+//   }
+// });
+const CLIENT_ID = process.env.CLIENT_ID
+const CLIENT_SECRET = process.env.CLIENT_SECRET
+const REDIRECT_URL = process.env.REDIRECT_URL
 
-const upload = multer({ storage: storage });
+const REFRESH_TOKEN = process.env.REFRESH_TOKEN
+
+const oauth2Client = new google.auth.OAuth2(
+    CLIENT_ID,
+    CLIENT_SECRET,
+    REDIRECT_URL
+)
+
+oauth2Client.setCredentials({refresh_token: REFRESH_TOKEN})
+
+const drive = google.drive({
+    version: 'v3',
+    auth: oauth2Client
+})
+
+const upload = multer({storage: multer.memoryStorage()}) //upload middleware that had object storage determining where we want to store the image, This ensures files are stored as buffer
 
 // POST route to create or update an event (with description)
 router.post('/events',verifyToken, authorize(['ADMIN']), async (req, res) => {
@@ -103,28 +124,64 @@ router.delete('/events/:id', verifyToken, authorize(['ADMIN']), async (req, res)
 
 // POST route to upload photos to a specific event
 router.post('/events/:id/photos', verifyToken, authorize(['ADMIN']), upload.array('photos', 30), async (req, res) => {
+  const transaction = await sequelize.transaction();
   try {
     const eventId = req.params.id;
     const photoFiles = req.files;
-    const { visibility } = req.body; // Expecting visibility for each photo (as array or single value)
+    const { visibility } = req.body;
 
-    // Check if visibility is an array (for multiple files) or a single value
+    if (!photoFiles || photoFiles.length === 0) {
+      return res.status(400).json({ error: 'No photos uploaded' });
+    }
+
     const visibilityFlags = Array.isArray(visibility) ? visibility : [visibility];
-    const photos = photoFiles.map((photoFile, index) => ({
-      event_id: eventId,
-      photo_url: `/uploads/photos/${photoFile.filename}`,
-      photo_name: photoFile.originalname,
-      visibility: visibilityFlags[index] === 'PUBLIC' ? 'PUBLIC' : 'PRIVATE', // Set visibility based on provided value or default to PRIVATE
-    }));
+    const photos = [];
 
-    await Photos.bulkCreate(photos);
+    for (const [index, photoFile] of photoFiles.entries()) {
+      const bufferStream = new stream.PassThrough();
+      bufferStream.end(photoFile.buffer);
+
+      const driveResponse = await drive.files.create({
+        requestBody: {
+          name: `event_${eventId}_${Date.now()}_${photoFile.originalname}`,
+          mimeType: photoFile.mimetype,
+        },
+        media: {
+          mimeType: photoFile.mimetype,
+          body: bufferStream,
+        },
+      });
+
+      await drive.permissions.create({
+        fileId: driveResponse.data.id,
+        requestBody: {
+          role: 'reader',
+          type: 'anyone',
+        },
+      });
+
+      const fileUrl = `https://drive.google.com/uc?id=${driveResponse.data.id}`;
+
+      photos.push({
+        event_id: eventId,
+        drive_file_id: driveResponse.data.id,
+        photo_url: fileUrl,
+        photo_name: photoFile.originalname,
+        visibility: visibilityFlags[index] === 'PUBLIC' ? 'PUBLIC' : 'PRIVATE',
+      });
+    }
+
+    await Photos.bulkCreate(photos, { transaction });
+    await transaction.commit();
 
     res.json({ message: 'Photos uploaded successfully', photos });
   } catch (error) {
-    console.log(error)
+    await transaction.rollback();
+    console.error('Error uploading photos:', error);
     res.status(500).json({ error: 'Failed to upload photos' });
   }
 });
+
 router.put('/photos/:id/visibility', verifyToken, authorize(['ADMIN']), async (req, res) => {
   try {
     const photoId = req.params.id;

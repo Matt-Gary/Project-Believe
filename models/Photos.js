@@ -19,7 +19,13 @@ module.exports = (sequelize, DataTypes) => {
         allowNull: false,
         validate: {
           notEmpty: true,
-          isUrl: true, // Ensures the column contains a valid URL
+        }
+      },
+      drive_file_id: {
+        type: DataTypes.STRING,
+        allowNull: false,
+        validate: {
+          notEmpty: true,
         }
       },
       photo_name: {
