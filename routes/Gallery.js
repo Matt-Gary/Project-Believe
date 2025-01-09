@@ -187,19 +187,16 @@ router.put('/photos/:id/visibility', verifyToken, authorize(['ADMIN']), async (r
     const photoId = req.params.id;
     const { visibility } = req.body;
 
-    // Ensure the provided visibility is valid
     if (!['PUBLIC', 'PRIVATE'].includes(visibility)) {
       return res.status(400).json({ error: 'Invalid visibility value. Must be either PUBLIC or PRIVATE.' });
     }
 
-    // Find the photo by ID
     const photo = await Photos.findOne({ where: { id: photoId } });
 
     if (!photo) {
       return res.status(404).json({ error: 'Photo not found' });
     }
 
-    // Update the photo's visibility
     photo.visibility = visibility;
     await photo.save();
 
@@ -208,16 +205,39 @@ router.put('/photos/:id/visibility', verifyToken, authorize(['ADMIN']), async (r
     console.error('Error updating photo visibility:', error);
     res.status(500).json({ error: 'Failed to update photo visibility' });
   }
-});  
+});
 // DELETE route to delete a specific photo by ID
 router.delete('/photos/:id', verifyToken, authorize(['ADMIN']), async (req, res) => {
   try {
     const photoId = req.params.id;
 
+    // Find the photo record in the database
+    const photo = await Photos.findOne({ where: { id: photoId } });
+
+    if (!photo) {
+      return res.status(404).json({ error: 'Photo not found' });
+    }
+
+    const driveFileId = photo.drive_file_id;
+
+    // Delete the photo from Google Drive
+    try {
+      await drive.files.delete({ fileId: driveFileId });
+      console.log(`Photo deleted from Google Drive: ${driveFileId}`);
+    } catch (error) {
+      if (error.response && error.response.status === 404) {
+        console.warn(`File not found in Google Drive: ${driveFileId}`);
+      } else {
+        throw error;
+      }
+    }
+
+    // Delete the photo record from the database
     await Photos.destroy({ where: { id: photoId } });
 
     res.json({ message: 'Photo deleted successfully' });
   } catch (error) {
+    console.error('Error deleting photo:', error);
     res.status(500).json({ error: 'Failed to delete photo' });
   }
 });
@@ -227,30 +247,33 @@ router.delete('/events/:id/photos', verifyToken, authorize(['ADMIN']), async (re
   try {
     const eventId = req.params.id;
 
-    // Step 1: Retrieve all photo file paths from the database
+    // Find all photos for the event
     const photos = await Photos.findAll({ where: { event_id: eventId } });
 
-    // Step 2: Delete the files from the uploads/photos folder
-    photos.forEach(photo => {
-      const filePath = path.join(__dirname, '..', photo.photo_url); // Adjust the path to match your directory structure
-      fs.unlink(filePath, (err) => {
-        if (err) {
-          console.error(`Failed to delete file ${filePath}: `, err);
+    // Delete each photo from Google Drive and the database
+    for (const photo of photos) {
+      try {
+        await drive.files.delete({ fileId: photo.drive_file_id });
+        console.log(`Photo deleted from Google Drive: ${photo.drive_file_id}`);
+      } catch (error) {
+        if (error.response && error.response.status === 404) {
+          console.warn(`File not found in Google Drive: ${photo.drive_file_id}`);
         } else {
-          console.log(`Successfully deleted file ${filePath}`);
+          throw error;
         }
-      });
-    });
+      }
+    }
 
-    // Step 3: Delete the photo records from the database
+    // Delete all photo records from the database
     await Photos.destroy({ where: { event_id: eventId } });
 
     res.json({ message: 'All photos for event deleted successfully' });
   } catch (error) {
-    console.error('Error deleting photos: ', error);
+    console.error('Error deleting photos:', error);
     res.status(500).json({ error: 'Failed to delete photos' });
   }
 });
+
 
 // PUT route to modify the description of a specific event
 router.put('/events/:id/description', verifyToken, authorize(['ADMIN']), async (req, res) => {
