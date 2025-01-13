@@ -181,6 +181,30 @@ router.post('/events/:id/photos', verifyToken, authorize(['ADMIN']), upload.arra
     res.status(500).json({ error: 'Failed to upload photos' });
   }
 });
+//Get photos from particular event
+// GET route to fetch photos for a specific event
+router.get('/events/:id/photos', verifyToken, authorize(['ADMIN', 'USER']), async (req, res) => {
+  try {
+    const eventId = req.params.id;
+
+    // Fetch all photos associated with the event ID
+    const photos = await Photos.findAll({
+      where: { event_id: eventId },
+      attributes: ['id', 'photo_url', 'photo_name', 'visibility', 'createdAt'], // Fetch necessary attributes
+    });
+
+    // Check if photos exist for the event
+    if (!photos || photos.length === 0) {
+      return res.status(404).json({ message: 'No photos found for this event' });
+    }
+
+    // Respond with the list of photos
+    res.status(200).json({ photos });
+  } catch (error) {
+    console.error('Error fetching event photos:', error);
+    res.status(500).json({ error: 'Failed to fetch event photos' });
+  }
+});
 
 router.put('/photos/:id/visibility', verifyToken, authorize(['ADMIN']), async (req, res) => {
   try {
