@@ -17,45 +17,41 @@ const authorize = require('../middleware/authorize');
 const { sendWhatsappMessage } = require('../middleware/whatsapp');
 const axios = require('axios'); 
 require('dotenv').config();
+const AWS = require('aws-sdk');
+const multerS3 = require('multer-s3');
+const multerSharpS3 = require('multer-sharp-s3');
+
+const BUCKET_NAME = process.env.S3_BUCKET_NAME
+const AWS_ACCESS_KEY = process.env.AWS_ACCESS_KEY_ID
+const AWS_SECRET_ACCESS = process.env.AWS_SECRET_ACCESS_KEY
+const AWS_REGION = process.env.AWS_REGION
 
 
-// Multer configuration
-//<form action="/users/update-photo" method="POST" enctype="multipart/form-data">
-//<input type="file" name="profilePhoto" accept="image/*">
-//<button type="submit">Upload Profile Photo</button>
-//</form>
-// const storage = multer.diskStorage({
-//     destination: (req, file, cb) => {
-//         cb(null, 'uploads/ProfileImages') //where we want to store this images
-//     },
+const s3 = new AWS.S3({
+  accessKeyId: AWS_ACCESS_KEY,
+  secretAccessKey: AWS_SECRET_ACCESS,
+  region: AWS_REGION,
+});
 
-//     filename: (req, file, cb) => { //we need to specify the name, adding the date of adding file and the file name
-//         console.log(file) 
-//         cb(null, Date.now() + path.extname(file.originalname)) //cb= call back - the name is replace with current date + original name
-//     }
-
-//     })
-
-const CLIENT_ID = process.env.CLIENT_ID
-const CLIENT_SECRET = process.env.CLIENT_SECRET
-const REDIRECT_URL = process.env.REDIRECT_URL
-
-const REFRESH_TOKEN = process.env.REFRESH_TOKEN
-
-const oauth2Client = new google.auth.OAuth2(
-    CLIENT_ID,
-    CLIENT_SECRET,
-    REDIRECT_URL
-)
-
-oauth2Client.setCredentials({refresh_token: REFRESH_TOKEN})
-
-const drive = google.drive({
-    version: 'v3',
-    auth: oauth2Client
-})
-
-const upload = multer({storage: multer.memoryStorage()}) //upload middleware that had object storage determining where we want to store the image, This ensures files are stored as buffer
+// Configure Multer to use S3
+const upload = multer({
+    storage: multerSharpS3({
+        s3: s3,
+        Bucket: BUCKET_NAME,
+        acl: 'public-read', // Change as per your requirement
+        resize: {
+            width: 200,
+            height: 200
+          },
+          toFormat: 'png',
+          Key: (req, file, cb) => {
+            // We'll generate the S3 key dynamically (userMatricula is known at route time)
+            const userMatricula = req.user?.matricula || 'unknown';
+            const uniqueFileName = `profile_${userMatricula}_${Date.now()}.png`;
+            cb(null, uniqueFileName);
+          }
+        })
+      });
 
 // Regular expression for email format validation
 const emailRegex = /^[\w-\.]+@([\w-]+\.)+[\w-]{2,4}$/;
@@ -106,9 +102,9 @@ router.post("/register", async (req, res) => {
             role: role,
             phoneNumber: formattedPhoneNumber 
         });
-        // await sendWelcomeEmail(user.email, user.username)
+        await sendWelcomeEmail(user.email, user.username)
         
-        // Respond with success message
+        //Respond with success message
         return res.json("User registered successfully");
 
     } catch (error) {
@@ -409,129 +405,47 @@ router.get("/userinfo", verifyToken, authorize(['ADMIN']), async (req, res) => {
 
 router.post('/update-photo', verifyToken, authorize(['ADMIN', 'USER']), upload.single('image'), async (req, res) => {
     const userMatricula = req.user.matricula;
-
+  
     // Ensure an image is uploaded
     if (!req.file) {
-        return res.status(400).json({ message: "No image uploaded" });
+      return res.status(400).json({ message: "No image uploaded" });
     }
-
+  
     try {
-        // Find the user by matricula and check for an existing profile photo
-        const user = await Users.findOne({ where: { matricula: userMatricula } });
-
-        if (!user) {
-            return res.status(404).json({ message: "User not found" });
+      // Find the user by matricula and check for an existing profile photo
+      const user = await Users.findOne({ where: { matricula: userMatricula } });
+      if (!user) {
+        return res.status(404).json({ message: "User not found" });
+      }
+  
+      // If the user already has a profile photo, delete the old one from S3
+      if (user.profilePhoto) {
+        try {
+          await s3.deleteObject({
+            Bucket: BUCKET_NAME,
+            Key: user.profilePhoto // We store the S3 key in user.profilePhoto
+          }).promise();
+        } catch (deleteErr) {
+          console.error("Error deleting old photo from S3:", deleteErr);
+          // Not throwing here, because it's not critical if the old photo isn't found.
         }
-        // If the user already has a profile photo, attempt to delete it from Google Drive
-        if (user.profilePhoto) {
-            try {
-                await drive.files.delete({ fileId: user.profilePhoto });
-                console.log("Old profile photo deleted successfully from Google Drive:", user.profilePhoto);
-            } catch (deleteError) {
-                if (deleteError.code === 404) {
-                    console.warn("File not found in Google Drive, might have been deleted already:", user.profilePhoto);
-                } else {
-                    console.error("Error deleting old photo from Google Drive:", deleteError);
-                    // Return here if the error is something other than not found
-                    return res.status(500).json({ message: "An error occurred while deleting the old profile photo." });
-                }
-            }
-        }
-
-        // Resize the uploaded image to 200x200 pixels using sharp
-        const resizedImageBuffer = await sharp(req.file.buffer)
-            .resize(200, 200)
-            .png() // Convert the image to PNG format if needed
-            .toBuffer();
-        
-        // Convert buffer to readable stream
-        const bufferStream = new stream.PassThrough();
-        bufferStream.end(resizedImageBuffer);
-
-        // Upload the resized image to Google Drive
-        const driveResponse = await drive.files.create({
-            requestBody: {
-                name: `profile_${userMatricula}_${Date.now()}.png`, // Give the file a unique name
-                mimeType: 'image/png',
-            },
-            media: {
-                mimeType: 'image/png',
-                body: bufferStream
-            }
-        });
-
-        // Set file permissions to be publicly accessible if required
-        await drive.permissions.create({
-            fileId: driveResponse.data.id,
-            requestBody: {
-                role: 'reader',
-                type: 'anyone'
-            }
-        });
-
-        // Generate the publicly accessible URL
-        const fileUrl = `https://drive.google.com/uc?id=${driveResponse.data.id}`;
-
- 
-        // Update the user's profilePhoto field with the new Google Drive file ID
-        user.profilePhoto = driveResponse.data.id;
-
-        // Save the updated user with the new profile photo
-        await user.save();
-
-        // Send success response back to the client
-        res.status(200).json({ message: "Profile photo updated successfully", profilePhotoUrl: fileUrl });
-
+      }
+  
+      user.profilePhoto = req.file.key; // e.g. "profile_5645261_1638058436010.png"
+      await user.save();
+  
+      // 2) Return the S3 file URL to the client
+      res.status(200).json({
+        message: "Profile photo updated successfully",
+        profilePhotoUrl: req.file.location,
+      });
     } catch (error) {
-        console.error("Error updating profile photo:", error);
-        res.status(500).json({ message: "An error occurred while updating the profile photo." });
+      console.error("Error updating profile photo:", error);
+      res.status(500).json({ message: "An error occurred while updating the profile photo." });
     }
-});
+  });
 // Route to delete profile photo
 router.delete('/delete-profilephoto', verifyToken, authorize(['ADMIN', 'USER']), async (req, res) => {
-    const userMatricula = req.user.matricula;
-
-    try {
-        // Find the user by matricula
-        const user = await Users.findOne({ where: { matricula: userMatricula } });
-
-        if (!user) {
-            return res.status(404).json({ message: "User not found" });
-        }
-
-        // Check if the user has a profile photo
-        if (!user.profilePhoto) {
-            return res.status(400).json({ message: "No profile photo to delete" });
-        }
-
-        const photoId = user.profilePhoto;
-
-        // Delete the profile photo from Google Drive
-        try {
-            await drive.files.delete({ fileId: photoId });
-            console.log("Profile photo deleted successfully from Google Drive:", photoId);
-        } catch (deleteError) {
-            if (deleteError.response && deleteError.response.status === 404) {
-                console.warn("File not found in Google Drive, might have been deleted already:", photoId);
-            } else {
-                console.error("Error deleting photo from Google Drive:", deleteError);
-                return res.status(500).json({ message: "An error occurred while deleting the profile photo." });
-            }
-        }
-
-        // Remove the profile photo field from the user record
-        user.profilePhoto = null;
-        await user.save();
-
-        // Send success response back to the client
-        res.status(200).json({ message: "Profile photo deleted successfully" });
-
-    } catch (error) {
-        console.error("Error deleting profile photo:", error);
-        res.status(500).json({ message: "An error occurred while deleting the profile photo." });
-    }
-});
-router.get('/profilephoto', verifyToken, authorize(['ADMIN', 'USER']), async (req, res) => {
     const userMatricula = req.user.matricula;
   
     try {
@@ -544,33 +458,87 @@ router.get('/profilephoto', verifyToken, authorize(['ADMIN', 'USER']), async (re
   
       // Check if the user has a profile photo
       if (!user.profilePhoto) {
-        return res.status(400).json({ message: "No profile photo found" });
+        return res.status(400).json({ message: "No profile photo to delete" });
       }
   
-      const fileId = user.profilePhoto;
+      const photoKey = user.profilePhoto;
   
-      // Fetch the image data from Google Drive
-      const response = await axios.get(`https://drive.google.com/uc?export=download&id=${fileId}`, {
-        responseType: 'stream',
-      });
+      // Delete the profile photo from S3
+      try {
+        await s3.deleteObject({
+          Bucket: BUCKET_NAME,
+          Key: photoKey, // user.profilePhoto stores the S3 key
+        }).promise();
   
-      // Set appropriate headers
-      res.set('Content-Type', response.headers['content-type']);
+        console.log("Profile photo deleted successfully from S3:", photoKey);
+      } catch (deleteError) {
+        if (deleteError.code === 'NoSuchKey') {
+          console.warn("File not found in S3, might have been deleted already:", photoKey);
+        } else {
+          console.error("Error deleting photo from S3:", deleteError);
+          return res.status(500).json({ message: "An error occurred while deleting the profile photo." });
+        }
+      }
   
-      // Stream the image data directly to the client
-      response.data.pipe(res);
+      // Remove the profile photo field from the user record
+      user.profilePhoto = null;
+      await user.save();
+  
+      // Send success response back to the client
+      res.status(200).json({ message: "Profile photo deleted successfully" });
   
     } catch (error) {
-      console.error("Error fetching profile photo:", error);
-  
-      if (error.response && error.response.status === 404) {
-        // Handle Google Drive file not found error
-        return res.status(404).json({ message: "Profile photo not found in Google Drive." });
-      }
-  
-      res.status(500).json({ message: "An error occurred while fetching the profile photo." });
+      console.error("Error deleting profile photo:", error);
+      res.status(500).json({ message: "An error occurred while deleting the profile photo." });
     }
   });
-  
+
+// Route to get the user's profile photo from S3
+router.get('/profilephoto', verifyToken, authorize(['ADMIN', 'USER']), async (req, res) => {
+  const userMatricula = req.user.matricula;
+
+  try {
+    // Find the user by matricula
+    const user = await Users.findOne({ where: { matricula: userMatricula } });
+
+    if (!user) {
+      return res.status(404).json({ message: "User not found" });
+    }
+
+    // Check if the user has a profile photo
+    if (!user.profilePhoto) {
+      return res.status(400).json({ message: "No profile photo found" });
+    }
+
+    const photoKey = user.profilePhoto; // e.g. "profile_5645261_1638058436010.png"
+
+    // Option 1: Stream the image directly to the response
+    const s3Object = s3.getObject({
+      Bucket: BUCKET_NAME,
+      Key: photoKey,
+    });
+
+    // If there's an error (e.g., the file isn't found), handle it
+    s3Object.on('error', (err) => {
+      console.error("Error fetching photo from S3:", err);
+      if (err.code === 'NoSuchKey') {
+        return res.status(404).json({ message: "Profile photo not found in S3." });
+      }
+      return res.status(500).json({ message: "Error fetching profile photo." });
+    });
+
+    // Stream the S3 data directly to the client
+    s3Object.createReadStream().pipe(res);
+
+  } catch (error) {
+    console.error("Error fetching profile photo:", error);
+    // If the error is from S3 about not finding the object:
+    if (error.code === 'NoSuchKey') {
+      return res.status(404).json({ message: "Profile photo not found in S3." });
+    }
+    return res.status(500).json({ message: "An error occurred while fetching the profile photo." });
+  }
+});
+
 
 module.exports = router;

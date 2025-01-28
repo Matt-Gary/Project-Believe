@@ -16,7 +16,7 @@ const BUCKET_NAME = process.env.S3_BUCKET_NAME
 const AWS_ACCESS_KEY = process.env.AWS_ACCESS_KEY_ID
 const AWS_SECRET_ACCESS = process.env.AWS_SECRET_ACCESS_KEY
 const AWS_REGION = process.env.AWS_REGION
-const REFRESH_TOKEN = process.env.REFRESH_TOKEN
+
 
 const s3 = new AWS.S3({
   accessKeyId: AWS_ACCESS_KEY,
