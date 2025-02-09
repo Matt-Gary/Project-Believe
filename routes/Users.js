@@ -33,25 +33,8 @@ const s3 = new AWS.S3({
   region: AWS_REGION,
 });
 
-// Configure Multer to use S3
-const upload = multer({
-    storage: multerSharpS3({
-        s3: s3,
-        Bucket: BUCKET_NAME,
-        acl: 'public-read', // Change as per your requirement
-        resize: {
-            width: 200,
-            height: 200
-          },
-          toFormat: 'png',
-          Key: (req, file, cb) => {
-            // We'll generate the S3 key dynamically (userMatricula is known at route time)
-            const userMatricula = req.user?.matricula || 'unknown';
-            const uniqueFileName = `profile_${userMatricula}_${Date.now()}.png`;
-            cb(null, uniqueFileName);
-          }
-        })
-      });
+
+const upload = multer({storage: multer.memoryStorage()}) 
 
 // Regular expression for email format validation
 const emailRegex = /^[\w-\.]+@([\w-]+\.)+[\w-]{2,4}$/;
@@ -102,7 +85,7 @@ router.post("/register", async (req, res) => {
             role: role,
             phoneNumber: formattedPhoneNumber 
         });
-        await sendWelcomeEmail(user.email, user.username)
+        // await sendWelcomeEmail(user.email, user.username)
         
         //Respond with success message
         return res.json("User registered successfully");
@@ -403,47 +386,65 @@ router.get("/userinfo", verifyToken, authorize(['ADMIN']), async (req, res) => {
     }
 })
 
+// POST route to upload user profile photo
 router.post('/update-photo', verifyToken, authorize(['ADMIN', 'USER']), upload.single('image'), async (req, res) => {
+  const transaction = await sequelize.transaction();
+  try {
     const userMatricula = req.user.matricula;
-  
-    // Ensure an image is uploaded
-    if (!req.file) {
-      return res.status(400).json({ message: "No image uploaded" });
+    const photoFile = req.file;
+
+    if (!photoFile) {
+      return res.status(400).json({ error: 'No photo uploaded' });
     }
-  
-    try {
-      // Find the user by matricula and check for an existing profile photo
-      const user = await Users.findOne({ where: { matricula: userMatricula } });
-      if (!user) {
-        return res.status(404).json({ message: "User not found" });
-      }
-  
-      // If the user already has a profile photo, delete the old one from S3
-      if (user.profilePhoto) {
-        try {
-          await s3.deleteObject({
-            Bucket: BUCKET_NAME,
-            Key: user.profilePhoto // We store the S3 key in user.profilePhoto
-          }).promise();
-        } catch (deleteErr) {
-          console.error("Error deleting old photo from S3:", deleteErr);
-          // Not throwing here, because it's not critical if the old photo isn't found.
-        }
-      }
-  
-      user.profilePhoto = req.file.key; // e.g. "profile_5645261_1638058436010.png"
-      await user.save();
-  
-      // 2) Return the S3 file URL to the client
-      res.status(200).json({
-        message: "Profile photo updated successfully",
-        profilePhotoUrl: req.file.location,
-      });
-    } catch (error) {
-      console.error("Error updating profile photo:", error);
-      res.status(500).json({ message: "An error occurred while updating the profile photo." });
+
+    const user = await Users.findOne({ where: { matricula: userMatricula } });
+    if (!user) {
+      return res.status(404).json({ error: 'User not found' });
     }
-  });
+
+    // Delete old photo if exists
+    if (user.profilePhoto) {
+      const oldKey = user.profilePhoto.split('/').pop(); // Extract S3 key from URL
+      try {
+        await s3.deleteObject({
+          Bucket: BUCKET_NAME,
+          Key: oldKey
+        }).promise();
+      } catch (deleteErr) {
+        console.error('Error deleting old photo:', deleteErr);
+      }
+    }
+
+    // Generate unique filename and upload to S3
+    const fileName = `profile_${userMatricula}_${Date.now()}_${photoFile.originalname}`;
+    const uploadParams = {
+      Bucket: BUCKET_NAME,
+      Key: fileName,
+      Body: photoFile.buffer,
+      ContentType: photoFile.mimetype,
+      ACL: 'public-read' // Remove if bucket policies block ACLs
+    };
+
+    const s3Response = await s3.upload(uploadParams).promise();
+
+    // Store FULL URL in profilePhoto 
+    user.profilePhoto = s3Response.Location;
+    await user.save({ transaction });
+    await transaction.commit();
+
+    res.json({ 
+      message: 'Profile photo updated successfully', 
+      profilePhotoUrl: s3Response.Location 
+    });
+  } catch (error) {
+    await transaction.rollback();
+    console.error('Update photo error:', error);
+    res.status(500).json({ 
+      error: 'Profile photo update failed',
+      details: error.message 
+    });
+  }
+});
 // Route to delete profile photo
 router.delete('/delete-profilephoto', verifyToken, authorize(['ADMIN', 'USER']), async (req, res) => {
     const userMatricula = req.user.matricula;
@@ -495,48 +496,69 @@ router.delete('/delete-profilephoto', verifyToken, authorize(['ADMIN', 'USER']),
 
 // Route to get the user's profile photo from S3
 router.get('/profilephoto', verifyToken, authorize(['ADMIN', 'USER']), async (req, res) => {
-  const userMatricula = req.user.matricula;
-
+  const transaction = await sequelize.transaction();
   try {
-    // Find the user by matricula
-    const user = await Users.findOne({ where: { matricula: userMatricula } });
+    const userMatricula = req.user.matricula;
+
+    const user = await Users.findOne({ 
+      where: { matricula: userMatricula },
+      transaction
+    });
 
     if (!user) {
-      return res.status(404).json({ message: "User not found" });
+      await transaction.rollback();
+      return res.status(404).json({ error: "User not found" });
     }
 
-    // Check if the user has a profile photo
     if (!user.profilePhoto) {
-      return res.status(400).json({ message: "No profile photo found" });
+      await transaction.rollback();
+      return res.status(404).json({ error: "No profile photo exists" });
     }
 
-    const photoKey = user.profilePhoto; // e.g. "profile_5645261_1638058436010.png"
-
-    // Option 1: Stream the image directly to the response
+    // Extract S3 key from full URL
+    const photoKey = user.profilePhoto.split('/').pop();
+    
     const s3Object = s3.getObject({
       Bucket: BUCKET_NAME,
-      Key: photoKey,
+      Key: photoKey
     });
 
-    // If there's an error (e.g., the file isn't found), handle it
-    s3Object.on('error', (err) => {
-      console.error("Error fetching photo from S3:", err);
-      if (err.code === 'NoSuchKey') {
-        return res.status(404).json({ message: "Profile photo not found in S3." });
+    // Set proper content type for image responses
+    res.type('image/*');
+
+    s3Object.on('httpHeaders', (statusCode, headers) => {
+      if (statusCode === 404) {
+        throw { code: 'NoSuchKey' };
       }
-      return res.status(500).json({ message: "Error fetching profile photo." });
+      res.set('Content-Type', headers['content-type']);
     });
 
-    // Stream the S3 data directly to the client
+    s3Object.on('error', (err) => {
+      console.error("S3 stream error:", err);
+      if (!res.headersSent) {
+        if (err.code === 'NoSuchKey') {
+          res.status(404).json({ error: "Photo not found in storage" });
+        } else {
+          res.status(500).json({ error: "Failed to retrieve photo" });
+        }
+      }
+    });
+
+    await transaction.commit();
     s3Object.createReadStream().pipe(res);
 
   } catch (error) {
-    console.error("Error fetching profile photo:", error);
-    // If the error is from S3 about not finding the object:
+    await transaction.rollback();
+    console.error("Profile photo fetch error:", error);
+    
     if (error.code === 'NoSuchKey') {
-      return res.status(404).json({ message: "Profile photo not found in S3." });
+      return res.status(404).json({ error: "Photo file not found" });
     }
-    return res.status(500).json({ message: "An error occurred while fetching the profile photo." });
+    
+    res.status(500).json({ 
+      error: "Failed to fetch profile photo",
+      details: error.message 
+    });
   }
 });
 
