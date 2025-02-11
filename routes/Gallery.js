@@ -9,34 +9,20 @@ const stream = require('stream')
 const { google } = require('googleapis'); //google DRIVE API
 const authorize = require('../middleware/authorize'); //authorization middleware
 const axios = require('axios'); 
+const AWS = require('aws-sdk');
+const multerS3 = require('multer-s3');
 
-// // Configure Multer storage for photo uploads
-// const storage = multer.diskStorage({
-//   destination: (req, file, cb) => {
-//     cb(null, 'uploads/photos/'); // Folder to store uploaded photos
-//   },
-//   filename: (req, file, cb) => {
-//     cb(null, Date.now() + path.extname(file.originalname)); // Use timestamp to prevent duplicate names
-//   }
-// });
-const CLIENT_ID = process.env.CLIENT_ID
-const CLIENT_SECRET = process.env.CLIENT_SECRET
-const REDIRECT_URL = process.env.REDIRECT_URL
+const BUCKET_NAME = process.env.S3_BUCKET_NAME
+const AWS_ACCESS_KEY = process.env.AWS_ACCESS_KEY_ID
+const AWS_SECRET_ACCESS = process.env.AWS_SECRET_ACCESS_KEY
+const AWS_REGION = process.env.AWS_REGION
 
-const REFRESH_TOKEN = process.env.REFRESH_TOKEN
 
-const oauth2Client = new google.auth.OAuth2(
-    CLIENT_ID,
-    CLIENT_SECRET,
-    REDIRECT_URL
-)
-
-oauth2Client.setCredentials({refresh_token: REFRESH_TOKEN})
-
-const drive = google.drive({
-    version: 'v3',
-    auth: oauth2Client
-})
+const s3 = new AWS.S3({
+  accessKeyId: AWS_ACCESS_KEY,
+  secretAccessKey: AWS_SECRET_ACCESS,
+  region: AWS_REGION,
+});
 
 const upload = multer({storage: multer.memoryStorage()}) //upload middleware that had object storage determining where we want to store the image, This ensures files are stored as buffer
 
@@ -136,40 +122,32 @@ router.post('/events/:id/photos', verifyToken, authorize(['ADMIN']), upload.arra
 
     const visibilityFlags = Array.isArray(visibility) ? visibility : [visibility];
     const photos = [];
-
     for (const [index, photoFile] of photoFiles.entries()) {
-      const bufferStream = new stream.PassThrough();
-      bufferStream.end(photoFile.buffer);
+      // Get filename
+      const fileName = `event_${eventId}_${Date.now()}_${photoFile.originalname}`;
 
-      const driveResponse = await drive.files.create({
-        requestBody: {
-          name: `event_${eventId}_${Date.now()}_${photoFile.originalname}`,
-          mimeType: photoFile.mimetype,
-        },
-        media: {
-          mimeType: photoFile.mimetype,
-          body: bufferStream,
-        },
-      });
+      // Upload do arquivo para o S3
+      const uploadParams = {
+        Bucket: BUCKET_NAME, 
+        Key: fileName, 
+        Body: photoFile.buffer,
+        ContentType: photoFile.mimetype,
+        ACL: 'public-read', // define public or not
+      };
 
-      await drive.permissions.create({
-        fileId: driveResponse.data.id,
-        requestBody: {
-          role: 'reader',
-          type: 'anyone',
-        },
-      });
+      const s3Response = await s3.upload(uploadParams).promise();
 
-      const fileUrl = `https://drive.google.com/uc?id=${driveResponse.data.id}`;
+      // URL file S3
+      const fileUrl = s3Response.Location;
 
       photos.push({
         event_id: eventId,
-        drive_file_id: driveResponse.data.id,
+        drive_file_id: fileName,
         photo_url: fileUrl,
         photo_name: photoFile.originalname,
         visibility: visibilityFlags[index] === 'PUBLIC' ? 'PUBLIC' : 'PRIVATE',
-      });
-    }
+        });
+      }
 
     await Photos.bulkCreate(photos, { transaction });
     await transaction.commit();
@@ -181,6 +159,7 @@ router.post('/events/:id/photos', verifyToken, authorize(['ADMIN']), upload.arra
     res.status(500).json({ error: 'Failed to upload photos' });
   }
 });
+    
 //Get photos from particular event
 // GET route to fetch photos for a specific event
 router.get('/events/:id/photos', verifyToken, authorize(['ADMIN', 'USER']), async (req, res) => {
@@ -243,18 +222,8 @@ router.delete('/photos/:id', verifyToken, authorize(['ADMIN']), async (req, res)
     }
 
     const driveFileId = photo.drive_file_id;
-
-    // Delete the photo from Google Drive
-    try {
-      await drive.files.delete({ fileId: driveFileId });
-      console.log(`Photo deleted from Google Drive: ${driveFileId}`);
-    } catch (error) {
-      if (error.response && error.response.status === 404) {
-        console.warn(`File not found in Google Drive: ${driveFileId}`);
-      } else {
-        throw error;
-      }
-    }
+    // Delete S3 file
+    deleteFileFromS3(driveFileId);
 
     // Delete the photo record from the database
     await Photos.destroy({ where: { id: photoId } });
@@ -274,18 +243,8 @@ router.delete('/events/:id/photos', verifyToken, authorize(['ADMIN']), async (re
     // Find all photos for the event
     const photos = await Photos.findAll({ where: { event_id: eventId } });
 
-    // Delete each photo from Google Drive and the database
     for (const photo of photos) {
-      try {
-        await drive.files.delete({ fileId: photo.drive_file_id });
-        console.log(`Photo deleted from Google Drive: ${photo.drive_file_id}`);
-      } catch (error) {
-        if (error.response && error.response.status === 404) {
-          console.warn(`File not found in Google Drive: ${photo.drive_file_id}`);
-        } else {
-          throw error;
-        }
-      }
+      await deleteFileFromS3(photo.drive_file_id);
     }
 
     // Delete all photo records from the database
@@ -341,5 +300,21 @@ router.delete('/events/:id/description', verifyToken, authorize(['ADMIN']), asyn
     res.status(500).json({ error: 'Failed to delete event description' });
   }
 });
+
+// Function to delete S3 file
+async function deleteFileFromS3(driveFileId) {
+  try {
+    const params = {
+      Bucket: BUCKET_NAME,
+      Key: driveFileId, // Usando apenas o nome do arquivo
+    };
+
+    await s3.deleteObject(params).promise();
+    console.log(`Photo deleted from S3: ${driveFileId}`);
+  } catch (error) {
+    console.error(`Error deleting file from S3: ${error.message}`);
+    throw error; // Lança o erro para o próximo tratamento
+  }
+}
 
 module.exports = router;
