@@ -517,10 +517,11 @@ router.get('/profilephoto', verifyToken, authorize(['ADMIN', 'USER']), async (re
 
     // Extract S3 key from full URL
     const photoKey = user.profilePhoto.split('/').pop();
+    const decodedKey = decodeURIComponent(photoKey)
     
     const s3Object = s3.getObject({
       Bucket: BUCKET_NAME,
-      Key: photoKey
+      Key: decodedKey
     });
 
     // Set proper content type for image responses
