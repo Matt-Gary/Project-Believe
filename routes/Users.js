@@ -274,8 +274,8 @@ router.put("/userUpdateByMatricula", verifyToken, authorize(['ADMIN', 'USER']), 
 
     try {
 
-        if(!(username == null || username.trim().length === 0) && !(email == null || email.trim().length === 0)){
-            return res.status(400).json("Field username and email is null or empty!");
+        if (username == null || username.trim().length === 0 || email == null || email.trim().length === 0) {
+          return res.status(400).json("Field username and email is null or empty!");
         }else if(matricula == null || matricula.trim().length === 0){
             return res.status(400).json("The matricula can't be null or empty!");
         }
