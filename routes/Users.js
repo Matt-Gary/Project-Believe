@@ -283,6 +283,9 @@ router.put("/userUpdateByMatricula", verifyToken, authorize(['ADMIN', 'USER']), 
       const sanitizedEmail = email ? email.trim() : null;
       const sanitizedPhoneNumber = phoneNumber ? phoneNumber.trim() : null;
 
+      // Declare formattedPhoneNumber outside the if block
+      let formattedPhoneNumber = null;
+
       // Validate Phone Number Format (must be 11 digits)
       if (sanitizedPhoneNumber) {
           const phoneRegex = /^\d{11}$/;
@@ -291,7 +294,7 @@ router.put("/userUpdateByMatricula", verifyToken, authorize(['ADMIN', 'USER']), 
           }
 
           // Format the phone number to include +55 country code
-          const formattedPhoneNumber = `55${sanitizedPhoneNumber}`;
+          formattedPhoneNumber = `55${sanitizedPhoneNumber}`;
       }
 
       // Fetch User by Matricula
@@ -301,29 +304,34 @@ router.put("/userUpdateByMatricula", verifyToken, authorize(['ADMIN', 'USER']), 
       }
 
       // Check for Existing Username, Email, or Phone Number
-      if (sanitizedUsername || sanitizedEmail || sanitizedPhoneNumber) {
-          const existingUser = await Users.findOne({
-              where: {
-                  [Op.or]: [
-                      { username: sanitizedUsername },
-                      { email: sanitizedEmail },
-                      { phoneNumber: formattedPhoneNumber } // Use formatted phone number for conflict check
-                  ]
-              }
-          });
-
-          if (existingUser) {
-              if (existingUser.username === sanitizedUsername) {
-                  return res.status(400).json("Username already exists!");
-              }
-              if (existingUser.email === sanitizedEmail) {
-                  return res.status(400).json("Email already exists!");
-              }
-              if (existingUser.phoneNumber === formattedPhoneNumber) {
-                  return res.status(400).json("Phone number already exists!");
-              }
-          }
-      }
+      if (sanitizedUsername || sanitizedEmail || formattedPhoneNumber) {
+        const existingUser = await Users.findOne({
+            where: {
+                [Op.and]: [
+                    { 
+                        [Op.or]: [
+                            { username: sanitizedUsername },
+                            { email: sanitizedEmail },
+                            { phoneNumber: formattedPhoneNumber }
+                        ]
+                    },
+                    { matricula: { [Op.ne]: sanitizedMatricula } } // Exclude current user
+                ]
+            }
+        });
+    
+        if (existingUser) {
+            if (existingUser.username === sanitizedUsername) {
+                return res.status(400).json("Username already exists!");
+            }
+            if (existingUser.email === sanitizedEmail) {
+                return res.status(400).json("Email already exists!");
+            }
+            if (existingUser.phoneNumber === formattedPhoneNumber) {
+                return res.status(400).json("Phone number already exists!");
+            }
+        }
+    }
 
       // Prepare Update Object
       const updateData = {};
@@ -333,8 +341,8 @@ router.put("/userUpdateByMatricula", verifyToken, authorize(['ADMIN', 'USER']), 
       if (sanitizedEmail) {
           updateData.email = sanitizedEmail;
       }
-      if (sanitizedPhoneNumber) {
-          updateData.phoneNumber = formattedPhoneNumber; // Use formatted phone number for update
+      if (formattedPhoneNumber) { // Use formatted phone number for update
+          updateData.phoneNumber = formattedPhoneNumber;
       }
       updateData.updatedAt = Date.now();
 
