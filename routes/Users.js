@@ -440,11 +440,10 @@ router.post('/update-photo', verifyToken, authorize(['ADMIN', 'USER']), upload.s
 
     // Delete old photo if exists
     if (user.profilePhoto) {
-      const oldKey = user.profilePhoto.split('/').pop(); // Extract S3 key from URL
       try {
         await s3.deleteObject({
           Bucket: BUCKET_NAME,
-          Key: oldKey
+          Key: user.profilePhoto
         }).promise();
       } catch (deleteErr) {
         console.error('Error deleting old photo:', deleteErr);
@@ -452,7 +451,7 @@ router.post('/update-photo', verifyToken, authorize(['ADMIN', 'USER']), upload.s
     }
 
     // Generate unique filename and upload to S3
-    const fileName = `profile_${userMatricula}_${Date.now()}_${photoFile.originalname}`;
+    const fileName = `users/${userMatricula}/profile_${userMatricula}_${Date.now()}_${photoFile.originalname}`;
     const uploadParams = {
       Bucket: BUCKET_NAME,
       Key: fileName,
@@ -463,9 +462,13 @@ router.post('/update-photo', verifyToken, authorize(['ADMIN', 'USER']), upload.s
 
     const s3Response = await s3.upload(uploadParams).promise();
 
-    // Store FULL URL in profilePhoto 
-    user.profilePhoto = s3Response.Location;
-    await user.save({ transaction });
+      // Store ONLY the S3 key in profilePhoto
+      user.profilePhoto = fileName; // Store the Key, not the full URL
+      await user.save({ 
+        transaction,
+        fields: ['profilePhoto'] // Explicitly specify field to update
+      });
+      
     await transaction.commit();
 
     res.json({ 
