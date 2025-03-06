@@ -120,11 +120,28 @@ router.post('/events/:id/photos', verifyToken, authorize(['ADMIN']), upload.arra
       return res.status(400).json({ error: 'No photos uploaded' });
     }
 
+     // Fetch the event name from the database
+     const event = await Events.findOne({ 
+      where: { id: eventId },
+      transaction
+    });
+
+    if (!event) {
+      await transaction.rollback();
+      return res.status(404).json({ error: 'Event not found' });
+    }
+
+    // Sanitize the event name for use in S3 key
+    const sanitizedEventName = event.name
+      .replace(/[^a-zA-Z0-9-_]/g, '_') // Replace invalid characters with underscores
+      .toLowerCase(); // Optional: Convert to lowercase for consistency
+
     const visibilityFlags = Array.isArray(visibility) ? visibility : [visibility];
     const photos = [];
     for (const [index, photoFile] of photoFiles.entries()) {
-      // Get filename
-      const fileName = `event_${eventId}_${Date.now()}_${photoFile.originalname}`;
+      // Define the folder structure in the Key
+      const folderName = `events/${sanitizedEventName}/`; // Use the sanitized event name
+      const fileName = `${folderName}event_${eventId}_${Date.now()}_${photoFile.originalname}`;   
 
       // Upload do arquivo para o S3
       const uploadParams = {
@@ -142,7 +159,7 @@ router.post('/events/:id/photos', verifyToken, authorize(['ADMIN']), upload.arra
 
       photos.push({
         event_id: eventId,
-        drive_file_id: fileName,
+        drive_file_id: fileName, // Store the full key (including folder path)
         photo_url: fileUrl,
         photo_name: photoFile.originalname,
         visibility: visibilityFlags[index] === 'PUBLIC' ? 'PUBLIC' : 'PRIVATE',
