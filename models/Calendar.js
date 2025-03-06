@@ -4,12 +4,8 @@ module.exports = (sequelize, DataTypes) => {
             type: DataTypes.DATE,
             allowNull: false,
             validate: {
-                isDate: true,
-                isDateOnly(value) {
-                    if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) {
-                        throw new Error('Date must be in YYYY-MM-DD format.');
-                    }
-                },
+                notEmpty: true,
+                isDate: true, // Built-in validator (no need for regex)
             },
         },
         event_name: {
