@@ -1,3 +1,32 @@
+const WELCOME_TEMPLATE = `
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Bem-vindo ao Nossa Família</title>
+</head>
+<body style="font-family: Arial, sans-serif; line-height: 1.6; color: white; max-width: 600px; margin: 0 auto; padding: 20px;">
+  <div style="background: linear-gradient(to right, #00B4D8, #0194B2); padding: 20px; text-align: center;">
+    <h1 style="color: white; margin: 0;">Bem-vindo ao Nossa Família!</h1>
+  </div>
+  <div style="background: linear-gradient(to right, #3C3C3C, #000000); padding: 20px; border-radius: 0 0 5px 5px; box-shadow: 0 2px 5px rgba(0,0,0,0.1);">
+    <p>Olá {name},</p>
+    <p>Estamos muito felizes em tê-lo conosco! Obrigado por se juntar à nossa comunidade.</p>
+    <div style="text-align: center; margin: 30px 0;">
+      <div style="background-color: #00B4D8; color: white; width: 50px; height: 50px; line-height: 50px; border-radius: 50%; display: inline-block; font-size: 30px;">
+        ✓
+      </div>
+    </div>
+    <p>Atenciosamente,<br>Equipe Believe Calistenia</p>
+  </div>
+  <div style="text-align: center; margin-top: 20px; color: #888; font-size: 0.8em;">
+    <p>Esta é uma mensagem automática, por favor, não responda a este e-mail.</p>
+  </div>
+</body>
+</html>
+`;
+
 const VERIFICATION_EMAIL_TEMPLATE = `
 <!DOCTYPE html>
 <html lang="en">
@@ -7,14 +36,14 @@ const VERIFICATION_EMAIL_TEMPLATE = `
   <title>Verify Your Email</title>
 </head>
 <body style="font-family: Arial, sans-serif; line-height: 1.6; color: #333; max-width: 600px; margin: 0 auto; padding: 20px;">
-  <div style="background: linear-gradient(to right, #4CAF50, #45a049); padding: 20px; text-align: center;">
+  <div style="background: linear-gradient(to right, #00B4D8, #0194B2); padding: 20px; text-align: center;">
     <h1 style="color: white; margin: 0;">Verify Your Email</h1>
   </div>
   <div style="background-color: #f9f9f9; padding: 20px; border-radius: 0 0 5px 5px; box-shadow: 0 2px 5px rgba(0,0,0,0.1);">
     <p>Hello,</p>
     <p>Thank you for signing up! Your verification code is:</p>
     <div style="text-align: center; margin: 30px 0;">
-      <span style="font-size: 32px; font-weight: bold; letter-spacing: 5px; color: #4CAF50;">{verificationCode}</span>
+      <span style="font-size: 32px; font-weight: bold; letter-spacing: 5px; color: #00B4D8;">{verificationCode}</span>
     </div>
     <p>Enter this code on the verification page to complete your registration.</p>
     <p>This code will expire in 15 minutes for security reasons.</p>
@@ -125,4 +154,4 @@ const VERIFICATION_CODE_TEMPLATE = `
 </body>
 </html>
 `
-module.exports = {VERIFICATION_EMAIL_TEMPLATE, PASSWORD_RESET_REQUEST_TEMPLATE, PASSWORD_RESET_SUCCESS_TEMPLATE, VERIFICATION_CODE_TEMPLATE }
+module.exports = {VERIFICATION_EMAIL_TEMPLATE, PASSWORD_RESET_REQUEST_TEMPLATE, PASSWORD_RESET_SUCCESS_TEMPLATE, VERIFICATION_CODE_TEMPLATE, WELCOME_TEMPLATE }

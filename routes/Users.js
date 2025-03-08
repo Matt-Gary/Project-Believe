@@ -85,7 +85,7 @@ router.post("/register", async (req, res) => {
             role: role,
             phoneNumber: formattedPhoneNumber 
         });
-        // await sendWelcomeEmail(user.email, user.username)
+        await sendWelcomeEmail(user.email, user.username)
         
         //Respond with success message
         return res.json("User registered successfully");
@@ -146,33 +146,71 @@ router.post("/logout", async (req, res) => {
     res.status(200).json({success: true, message: "Logged out succesfully"})
 
 })
-// Route to forgot passworddd
+// Route to forgot password
 router.post("/forgot-password", async (req, res) => {
-    const { email } = req.body
+    const { email } = req.body;
+
     try {
-        const user = await Users.findOne({where: {email}})
+        // Find the user by email
+        const user = await Users.findOne({ where: { email } });
 
         if (!user) {
-            return res.status(400).json({ success: false, message: "User not found"})
+            return res.status(400).json({ success: false, message: "User not found" });
         }
-        //creating token to reset a password
-        const resetToken = crypto.randomBytes(20).toString("hex")
-        const resetTokenExpiresAt = Date.now() + 1 * 60 * 69 * 1000 //1 hour
 
+        // Generate a reset token and set its expiration time (1 hour from now)
+        const resetToken = crypto.randomBytes(20).toString("hex");
+        const resetTokenExpiresAt = Date.now() + 1 * 60 * 60 * 1000; // 1 hour
+
+        // Save the reset token and expiration time to the user
         user.resetPasswordCode = resetToken;
-        user.resetPasswordExpiresAt = resetTokenExpiresAt
+        user.resetPasswordExpiresAt = resetTokenExpiresAt;
+        await user.save();
 
-        await user.save()
-        //send email with a link to reset a password 
-        await sendPasswordResetEmail(user.email, `http://localhost:5173/reset-password/${resetToken}`, user.username)
+        // Send the password reset email
+        const resetLink = `http://localhost:5000/reset-password/${resetToken}`; // Use port 5000
+        await sendPasswordResetEmail(user.email, resetLink, user.username);
 
-        res.status(200).json({success: true, message: "Password reset link sent to your email"})
-
+        // Respond with success
+        res.status(200).json({ success: true, message: "Password reset link sent to your email" });
     } catch (error) {
-        console.log("Error in forgotPassword", error)
-        res.status(400).json({success: false, message: error.message})
+        console.error("Error in forgotPassword:", error);
+        res.status(500).json({ success: false, message: "An error occurred while processing your request" });
     }
-})
+});
+
+//reset password with token
+router.post("/reset-password/:token", async (req, res) => {
+  const { token } = req.params;
+  const { newPassword } = req.body;
+
+  try {
+      // Find the user by the reset token and check if it's still valid
+      const user = await Users.findOne({
+          where: {
+              resetPasswordCode: token,
+              resetPasswordExpiresAt: { [Op.gt]: Date.now() }, // Check if the token is not expired
+          },
+      });
+
+      if (!user) {
+          return res.status(400).json({ success: false, message: "Invalid or expired token" });
+      }
+
+      // Hash the new password and save it
+      const hashedPassword = await bcrypt.hash(newPassword, 10);
+      user.password = hashedPassword;
+      user.resetPasswordCode = null; // Clear the reset token
+      user.resetPasswordExpiresAt = null; // Clear the expiration time
+      await user.save();
+
+      // Respond with success
+      res.status(200).json({ success: true, message: "Password reset successfully" });
+  } catch (error) {
+      console.error("Error in resetPassword:", error);
+      res.status(500).json({ success: false, message: "An error occurred while resetting the password" });
+  }
+});
 // Reset password route
 router.post("/reset-password/", async (req, res) => {
     const { token, password } = req.body;
