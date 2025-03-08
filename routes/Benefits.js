@@ -6,50 +6,9 @@ const { Partnerships, Users } = require('../models');
 const verifyToken = require('../middleware/verifyToken'); // Import the middleware
 const { sendWhatsappMessageToCompany, sendWhatsappMessageToUser } =require('../middleware/whatsapp')
 
+
 // POST /benefits/claim/:benefitId
 router.post('/claim/:benefitId', verifyToken, authorize(['USER', 'ADMIN']), async (req, res) => {
-    // try {
-    //     const { benefitId } = req.params;
-    //     const userMatricula = req.user.matricula; // Assuming the matricula is still in the token
-
-    //     // Fetch the user from the database
-    //     const user = await Users.findOne({ where: { matricula: userMatricula } });
-
-    //     if (!user) {
-    //         return res.status(404).json({ message: 'User not found' });
-    //     }
-
-    //     const userEmail = user.email;
-    //     const userName = user.username;
-
-    //     console.log('User data:', { userEmail, userName, benefitId });
-
-    //     // Fetch the partnership related to the benefit
-    //     const partnership = await Partnerships.findByPk(benefitId);
-    //     if (!partnership) {
-    //         return res.status(404).json({ message: 'Benefit not found' });
-    //     }
-
-    //     console.log('Partnership data:', partnership);
-
-    //     // Make sure companyEmail is not undefined
-    //     if (!partnership.companyEmail) {
-    //         return res.status(400).json({ message: 'Company email is missing' });
-    //     }
-
-    //     // Generate a random verification code
-    //     const verificationCode = crypto.randomBytes(3).toString('hex');
-
-    //     console.log('Sending verification code:', { userEmail, companyEmail: partnership.companyEmail, verificationCode, userName, companyName: partnership.companyName });
-
-    //     // Send verification code to both the user and the company
-    //     await sendVerificationCode(userEmail, partnership.companyEmail, verificationCode, userName, partnership.companyName);
-
-    //     res.status(200).json({ message: 'Verification emails sent to both user and company' });
-    // } catch (err) {
-    //     console.error('Error in benefit claim:', err);
-    //     res.status(500).json({ message: 'An error occurred', error: err.message });
-    // }
     try {
       const { benefitId } = req.params;
       const userMatricula = req.user.matricula; // Extracting user matricula from token

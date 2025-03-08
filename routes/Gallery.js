@@ -49,7 +49,50 @@ router.post('/events',verifyToken, authorize(['ADMIN']), async (req, res) => {
     }
   });
 
-
+  // GET route to display all events with their photos
+  router.get('/events', verifyToken, async (req, res) => {
+    try {
+      // Fetch all events
+      const events = await Events.findAll();
+    
+      // For each event, fetch photos based on user authentication
+      const eventsWithPhotos = await Promise.all(
+        events.map(async (event) => {
+          let photos;
+          
+          if (req.user) {
+            // Logged-in user: Show both public and private photos
+            photos = await Photos.findAll({ 
+              where: { 
+                event_id: event.id
+              }
+            });
+          } else {
+            // Guest: Show only public photos
+            photos = await Photos.findAll({
+              where: {
+                event_id: event.id,
+                visibility: 'PUBLIC'
+              }
+            });
+          }
+        
+          return {
+            ...event.toJSON(),
+            photos
+          };
+        })
+      );
+    
+      res.json(eventsWithPhotos);
+    } catch (error) {
+      console.error('Error retrieving events:', error);
+      res.status(500).json({ 
+        error: 'Failed to retrieve events', 
+        details: error.message 
+      });
+    }
+  });
 
 // GET route to display the details of a specific event with description and photos
 router.get('/events/:id', verifyToken, async (req, res) => {
