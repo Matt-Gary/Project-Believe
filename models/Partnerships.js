@@ -17,7 +17,7 @@ module.exports = (sequelize, DataTypes) => {
       },
       phoneNumber: {
         type: DataTypes.STRING,
-        allowNull: false, 
+        allowNull: true, 
         validate: {
           is: {
             args: /^[0-9]{13}$/, // Ensures the phone number follows the format 13 digits (e.g., 5585999713444)
@@ -36,6 +36,10 @@ module.exports = (sequelize, DataTypes) => {
       description: {
         type: DataTypes.TEXT,
         allowNull: true, // Optional field
+      },
+      companyLogo: {
+        type: DataTypes.STRING,
+        allowNull:true,
       },
       createdAt: {
         type: DataTypes.DATE,
