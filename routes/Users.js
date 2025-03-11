@@ -39,61 +39,89 @@ const upload = multer({storage: multer.memoryStorage()})
 // Regular expression for email format validation
 const emailRegex = /^[\w-\.]+@([\w-]+\.)+[\w-]{2,4}$/;
 
+// Função para calcular a data de término
+const calculateEndDate = (startDate, typeOfPlan) => {
+  const endDate = new Date(startDate);
+
+  switch (typeOfPlan) {
+    case 'mensal':
+      endDate.setMonth(endDate.getMonth() + 1);
+      break;
+    case 'trimestral':
+      endDate.setMonth(endDate.getMonth() + 3);
+      break;
+    case 'semestral':
+      endDate.setMonth(endDate.getMonth() + 6);
+      break;
+    case 'anual':
+      endDate.setFullYear(endDate.getFullYear() + 1);
+      break;
+    default:
+      throw new Error('Tipo de plano inválido');
+  }
+
+  return endDate;
+};
+
 // Register a new user
-router.post("/register", async (req, res) => {
-    // Extracting username, password, email, and matricula from the request body
-    const { username, password, email, matricula, role, phoneNumber } = req.body;
+router.post('/register', async (req, res) => {
+  const { username, password, email, matricula, role, phoneNumber, typeOfPlan, startDate } = req.body;
 
-    // Validate email format before proceeding
-    if (!emailRegex.test(email)) {
-        return res.status(400).json({error: "Formato de e-mail inválido"})
+  // Validação do e-mail
+  if (!emailRegex.test(email)) {
+    return res.status(400).json({ error: 'Formato de e-mail inválido' });
+  }
+
+  // Validação do número de telefone
+  const phoneRegex = /^\d{11}$/;
+  if (!phoneRegex.test(phoneNumber)) {
+    return res.status(400).json({ error: 'Número de telefone inválido. Deve conter 11 dígitos.' });
+  }
+
+  // Formata o número de telefone com o código do país
+  const formattedPhoneNumber = `55${phoneNumber}`;
+
+  try {
+    // Verifica se o e-mail já está em uso
+    const existingUser = await Users.findOne({ where: { email } });
+    if (existingUser) {
+      return res.status(400).json({ error: 'O usuário já existe' });
     }
 
-    // Validate phone number format (must be 11 digits)
-    const phoneRegex = /^\d{11}$/;
-    if (!phoneRegex.test(phoneNumber)) {
-        return res.status(400).json({ error: "Número de telefone inválido. Deve conter 11 dígitos." });
+    // Verifica se a matrícula já está em uso
+    const existingMatricula = await Users.findOne({ where: { matricula } });
+    if (existingMatricula) {
+      return res.status(400).json({ error: 'Matrícula já é usada' });
     }
 
-    // Format the phone number to include +55 country code
-    const formattedPhoneNumber = `55${phoneNumber}`;
+    // Hash da senha
+    const hashedPassword = await bcrypt.hash(password, 10);
 
-    try {
-        //Check if a user with the same email already exists
-        const existingUser = await Users.findOne({ where: { email: email } });
-        // Check if a user with the same matricula already exists
-        const existingMatricula = await Users.findOne({ where: { matricula: matricula } });
-        // Validation: Check if matricula is already in use
-        if (existingMatricula) {
-            return res.status(400).json({error: "Matrícula já é usada"})
-        }
-        // Validation: Check if the email is already registered
-        if (existingUser) {
-            return res.status(400).json({ error: "O usuário já existe" });
-        }
+    // Calcula a data de término com base no tipo de plano e data de início
+    const endDate = calculateEndDate(startDate || new Date(), typeOfPlan || 'mensal');
 
-        // Hash the password before storing it in the database
-        const hashedPassword = await bcrypt.hash(password, 10);
+    // Cria o novo usuário
+    const user = await Users.create({
+      username,
+      password: hashedPassword,
+      matricula,
+      email,
+      role,
+      phoneNumber: formattedPhoneNumber,
+      typeOfPlan: typeOfPlan || 'mensal', // Plano padrão é mensal
+      startDate: startDate || new Date(), // Data de início padrão é a data atual
+      endDate,
+    });
 
-        // Create a new user in the Users table with the provided data
-        const user = await Users.create({
-            username: username,
-            password: hashedPassword, // Storing the hashed password, not the plain text
-            matricula: matricula,
-            email: email,
-            createdAt: Date.now(),
-            role: role,
-            phoneNumber: formattedPhoneNumber 
-        });
-        await sendWelcomeEmail(user.email, user.username)
-        
-        //Respond with success message
-        return res.json("User registered successfully");
+    // Envia e-mail de boas-vindas
+    await sendWelcomeEmail(user.email, user.username);
 
-    } catch (error) {
-        console.error("Error registering user:", error);
-        return res.status(500).json({ error: "An error occurred while registering the user.", error });
-    }
+    // Responde com sucesso
+    res.json({ message: 'Usuário registrado com sucesso', user });
+  } catch (error) {
+    console.error('Erro ao registrar usuário:', error);
+    res.status(500).json({ error: 'Ocorreu um erro ao registrar o usuário.', details: error.message });
+  }
 });
 
 // Route to log in an existing user
