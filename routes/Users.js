@@ -26,6 +26,7 @@ const AWS_ACCESS_KEY = process.env.AWS_ACCESS_KEY_ID
 const AWS_SECRET_ACCESS = process.env.AWS_SECRET_ACCESS_KEY
 const AWS_REGION = process.env.AWS_REGION
 
+const CAPTCHA = process.env.RECAPTCHA_SECRET_KEY
 
 const s3 = new AWS.S3({
   accessKeyId: AWS_ACCESS_KEY,
@@ -65,63 +66,76 @@ const calculateEndDate = (startDate, typeOfPlan) => {
 
 // Register a new user
 router.post('/register', async (req, res) => {
-  const { username, password, email, matricula, role, phoneNumber, typeOfPlan, startDate } = req.body;
+    const { username, password, email, matricula, role, phoneNumber, typeOfPlan, startDate, 'g-recaptcha-response': captchaResponse } = req.body;
 
-  // Validação do e-mail
-  if (!emailRegex.test(email)) {
-    return res.status(400).json({ error: 'Formato de e-mail inválido' });
-  }
-
-  // Validação do número de telefone
-  const phoneRegex = /^\d{11}$/;
-  if (!phoneRegex.test(phoneNumber)) {
-    return res.status(400).json({ error: 'Número de telefone inválido. Deve conter 11 dígitos.' });
-  }
-
-  // Formata o número de telefone com o código do país
-  const formattedPhoneNumber = `55${phoneNumber}`;
-
-  try {
-    // Verifica se o e-mail já está em uso
-    const existingUser = await Users.findOne({ where: { email } });
-    if (existingUser) {
-      return res.status(400).json({ error: 'O usuário já existe' });
+    // Validate CAPTCHA response
+    if (!captchaResponse) {
+        return res.status(400).json({ error: 'CAPTCHA verification failed' });
     }
 
-    // Verifica se a matrícula já está em uso
-    const existingMatricula = await Users.findOne({ where: { matricula } });
-    if (existingMatricula) {
-      return res.status(400).json({ error: 'Matrícula já é usada' });
+    // Verify the CAPTCHA response with Google
+    const verificationUrl = `https://www.google.com/recaptcha/api/siteverify?secret=${process.env.RECAPTCHA_SECRET_KEY}&response=${captchaResponse}`;
+
+    try {
+        const response = await axios.post(verificationUrl);
+        const { success } = response.data;
+
+        if (!success) {
+            return res.status(400).json({ error: 'CAPTCHA verification failed' });
+        }
+
+        // Validate email format
+        if (!emailRegex.test(email)) {
+            return res.status(400).json({ error: 'Formato de e-mail inválido' });
+        }
+
+        // Validate phone number format
+        const phoneRegex = /^\d{11}$/;
+        if (!phoneRegex.test(phoneNumber)) {
+            return res.status(400).json({ error: 'Número de telefone inválido. Deve conter 11 dígitos.' });
+        }
+
+        // Format the phone number
+        const formattedPhoneNumber = `55${phoneNumber}`;
+
+        // Check if email or matricula already exists
+        const existingUser = await Users.findOne({ where: { email } });
+        const existingMatricula = await Users.findOne({ where: { matricula } });
+        if (existingUser) {
+            return res.status(400).json({ error: 'O usuário já existe' });
+        }
+        if (existingMatricula) {
+            return res.status(400).json({ error: 'Matrícula já é usada' });
+        }
+
+        // Hash the password
+        const hashedPassword = await bcrypt.hash(password, 10);
+
+        // Calculate end date based on plan type and start date
+        const endDate = calculateEndDate(startDate || new Date(), typeOfPlan || 'mensal');
+
+        // Create the user
+        const user = await Users.create({
+            username,
+            password: hashedPassword,
+            email,
+            matricula,
+            role,
+            phoneNumber: formattedPhoneNumber,
+            typeOfPlan: typeOfPlan || 'mensal', // Default plan is monthly
+            startDate: startDate || new Date(), // Default start date is today
+            endDate,
+        });
+
+        // Send welcome email
+        await sendWelcomeEmail(user.email, user.username);
+
+        // Respond with success
+        res.json({ message: 'Usuário registrado com sucesso', user });
+    } catch (error) {
+        console.error('Erro ao registrar usuário:', error);
+        res.status(500).json({ error: 'Ocorreu um erro ao registrar o usuário.', details: error.message });
     }
-
-    // Hash da senha
-    const hashedPassword = await bcrypt.hash(password, 10);
-
-    // Calcula a data de término com base no tipo de plano e data de início
-    const endDate = calculateEndDate(startDate || new Date(), typeOfPlan || 'mensal');
-
-    // Cria o novo usuário
-    const user = await Users.create({
-      username,
-      password: hashedPassword,
-      matricula,
-      email,
-      role,
-      phoneNumber: formattedPhoneNumber,
-      typeOfPlan: typeOfPlan || 'mensal', // Plano padrão é mensal
-      startDate: startDate || new Date(), // Data de início padrão é a data atual
-      endDate,
-    });
-
-    // Envia e-mail de boas-vindas
-    await sendWelcomeEmail(user.email, user.username);
-
-    // Responde com sucesso
-    res.json({ message: 'Usuário registrado com sucesso', user });
-  } catch (error) {
-    console.error('Erro ao registrar usuário:', error);
-    res.status(500).json({ error: 'Ocorreu um erro ao registrar o usuário.', details: error.message });
-  }
 });
 
 // Route to log in an existing user
