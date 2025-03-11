@@ -1,6 +1,6 @@
 const express = require('express');
 const router = express.Router();
-const { Users, sequelize } = require('../models');
+const { Users, VerificationCodes, sequelize } = require('../models');
 const { Op } = require('sequelize');
 const bcrypt = require("bcrypt");
 const jwt = require("jsonwebtoken")
@@ -167,6 +167,85 @@ router.post("/login", async (req, res) => {
         res.status(500).json({message: "Server Error"})
     }
 })
+// Rota para definir/atualizar o código de verificação
+router.post('/set-code', verifyToken, authorize(['ADMIN']), async (req, res) => {
+  const { code } = req.body;
+
+  if (!code) {
+    return res.status(400).json({ error: 'Código de verificação é obrigatório' });
+  }
+
+  try {
+    // Verifica se já existe um código
+    const existingCode = await VerificationCodes.findOne();
+
+    if (existingCode) {
+      // Atualiza o código existente
+      existingCode.code = code;
+      await existingCode.save();
+    } else {
+      // Cria um novo código
+      await VerificationCodes.create({ code });
+    }
+
+    res.json({ message: 'Código de verificação definido com sucesso' });
+  } catch (error) {
+    console.error('Erro ao definir o código de verificação:', error);
+    res.status(500).json({ error: 'Falha ao definir o código de verificação', details: error.message });
+  }
+});
+// Rota para verificar o código
+router.post('/verify-code', verifyToken, async (req, res) => {
+  const { code } = req.body;
+  const userMatricula = req.user.matricula; // Extrai a matrícula do usuário do token
+
+  if (!code) {
+    return res.status(400).json({ error: 'Código de verificação é obrigatório' });
+  }
+
+  try {
+    // Busca o código de verificação
+    const verificationCode = await VerificationCodes.findOne();
+
+    if (!verificationCode) {
+      return res.status(400).json({ error: 'Nenhum código de verificação definido' });
+    }
+
+    // Verifica se o código fornecido pelo usuário corresponde ao código definido pelo admin
+    if (code !== verificationCode.code) {
+      return res.status(400).json({ error: 'Código de verificação incorreto' });
+    }
+
+    // Atualiza o status do usuário para verificado (opcional)
+    const user = await Users.findOne({ where: { matricula: userMatricula } });
+    if (user) {
+      user.isVerified = true; // Adicione um campo `isVerified` ao modelo `Users`
+      await user.save();
+    }
+
+    res.json({ message: 'Código de verificação válido' });
+  } catch (error) {
+    console.error('Erro ao verificar o código:', error);
+    res.status(500).json({ error: 'Falha ao verificar o código', details: error.message });
+  }
+});
+// Rota para obter o código de verificação atual (apenas para admin)
+router.get('/get-code', verifyToken, authorize(['ADMIN']), async (req, res) => {
+  try {
+    // Busca o código de verificação
+    const verificationCode = await VerificationCodes.findOne();
+
+    if (!verificationCode) {
+      return res.status(404).json({ error: 'Nenhum código de verificação definido' });
+    }
+
+    // Retorna o código de verificação
+    res.json({ code: verificationCode.code });
+  } catch (error) {
+    console.error('Erro ao obter o código de verificação:', error);
+    res.status(500).json({ error: 'Falha ao obter o código de verificação', details: error.message });
+  }
+});
 // Route to log out
 router.post("/logout", async (req, res) => {
     //deleting cookie
