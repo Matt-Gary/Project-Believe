@@ -1,6 +1,6 @@
 const express = require('express');
 const router = express.Router();
-const { Users, sequelize } = require('../models');
+const { Users, VerificationCodes, sequelize } = require('../models');
 const { Op } = require('sequelize');
 const bcrypt = require("bcrypt");
 const jwt = require("jsonwebtoken")
@@ -26,6 +26,7 @@ const AWS_ACCESS_KEY = process.env.AWS_ACCESS_KEY_ID
 const AWS_SECRET_ACCESS = process.env.AWS_SECRET_ACCESS_KEY
 const AWS_REGION = process.env.AWS_REGION
 
+const CAPTCHA = process.env.RECAPTCHA_SECRET_KEY
 
 const s3 = new AWS.S3({
   accessKeyId: AWS_ACCESS_KEY,
@@ -65,63 +66,76 @@ const calculateEndDate = (startDate, typeOfPlan) => {
 
 // Register a new user
 router.post('/register', async (req, res) => {
-  const { username, password, email, matricula, role, phoneNumber, typeOfPlan, startDate } = req.body;
+    const { username, password, email, matricula, role, phoneNumber, typeOfPlan, startDate, 'g-recaptcha-response': captchaResponse } = req.body;
 
-  // Validação do e-mail
-  if (!emailRegex.test(email)) {
-    return res.status(400).json({ error: 'Formato de e-mail inválido' });
-  }
-
-  // Validação do número de telefone
-  const phoneRegex = /^\d{11}$/;
-  if (!phoneRegex.test(phoneNumber)) {
-    return res.status(400).json({ error: 'Número de telefone inválido. Deve conter 11 dígitos.' });
-  }
-
-  // Formata o número de telefone com o código do país
-  const formattedPhoneNumber = `55${phoneNumber}`;
-
-  try {
-    // Verifica se o e-mail já está em uso
-    const existingUser = await Users.findOne({ where: { email } });
-    if (existingUser) {
-      return res.status(400).json({ error: 'O usuário já existe' });
+    // Validate CAPTCHA response
+    if (!captchaResponse) {
+        return res.status(400).json({ error: 'CAPTCHA verification failed' });
     }
 
-    // Verifica se a matrícula já está em uso
-    const existingMatricula = await Users.findOne({ where: { matricula } });
-    if (existingMatricula) {
-      return res.status(400).json({ error: 'Matrícula já é usada' });
+    // Verify the CAPTCHA response with Google
+    const verificationUrl = `https://www.google.com/recaptcha/api/siteverify?secret=${process.env.RECAPTCHA_SECRET_KEY}&response=${captchaResponse}`;
+
+    try {
+        const response = await axios.post(verificationUrl);
+        const { success } = response.data;
+
+        if (!success) {
+            return res.status(400).json({ error: 'CAPTCHA verification failed' });
+        }
+
+        // Validate email format
+        if (!emailRegex.test(email)) {
+            return res.status(400).json({ error: 'Formato de e-mail inválido' });
+        }
+
+        // Validate phone number format
+        const phoneRegex = /^\d{11}$/;
+        if (!phoneRegex.test(phoneNumber)) {
+            return res.status(400).json({ error: 'Número de telefone inválido. Deve conter 11 dígitos.' });
+        }
+
+        // Format the phone number
+        const formattedPhoneNumber = `55${phoneNumber}`;
+
+        // Check if email or matricula already exists
+        const existingUser = await Users.findOne({ where: { email } });
+        const existingMatricula = await Users.findOne({ where: { matricula } });
+        if (existingUser) {
+            return res.status(400).json({ error: 'O usuário já existe' });
+        }
+        if (existingMatricula) {
+            return res.status(400).json({ error: 'Matrícula já é usada' });
+        }
+
+        // Hash the password
+        const hashedPassword = await bcrypt.hash(password, 10);
+
+        // Calculate end date based on plan type and start date
+        const endDate = calculateEndDate(startDate || new Date(), typeOfPlan || 'mensal');
+
+        // Create the user
+        const user = await Users.create({
+            username,
+            password: hashedPassword,
+            email,
+            matricula,
+            role,
+            phoneNumber: formattedPhoneNumber,
+            typeOfPlan: typeOfPlan || 'mensal', // Default plan is monthly
+            startDate: startDate || new Date(), // Default start date is today
+            endDate,
+        });
+
+        // Send welcome email
+        await sendWelcomeEmail(user.email, user.username);
+
+        // Respond with success
+        res.json({ message: 'Usuário registrado com sucesso', user });
+    } catch (error) {
+        console.error('Erro ao registrar usuário:', error);
+        res.status(500).json({ error: 'Ocorreu um erro ao registrar o usuário.', details: error.message });
     }
-
-    // Hash da senha
-    const hashedPassword = await bcrypt.hash(password, 10);
-
-    // Calcula a data de término com base no tipo de plano e data de início
-    const endDate = calculateEndDate(startDate || new Date(), typeOfPlan || 'mensal');
-
-    // Cria o novo usuário
-    const user = await Users.create({
-      username,
-      password: hashedPassword,
-      matricula,
-      email,
-      role,
-      phoneNumber: formattedPhoneNumber,
-      typeOfPlan: typeOfPlan || 'mensal', // Plano padrão é mensal
-      startDate: startDate || new Date(), // Data de início padrão é a data atual
-      endDate,
-    });
-
-    // Envia e-mail de boas-vindas
-    await sendWelcomeEmail(user.email, user.username);
-
-    // Responde com sucesso
-    res.json({ message: 'Usuário registrado com sucesso', user });
-  } catch (error) {
-    console.error('Erro ao registrar usuário:', error);
-    res.status(500).json({ error: 'Ocorreu um erro ao registrar o usuário.', details: error.message });
-  }
 });
 
 // Route to log in an existing user
@@ -167,6 +181,85 @@ router.post("/login", async (req, res) => {
         res.status(500).json({message: "Server Error"})
     }
 })
+// Rota para definir/atualizar o código de verificação
+router.post('/set-code', verifyToken, authorize(['ADMIN']), async (req, res) => {
+  const { code } = req.body;
+
+  if (!code) {
+    return res.status(400).json({ error: 'Código de verificação é obrigatório' });
+  }
+
+  try {
+    // Verifica se já existe um código
+    const existingCode = await VerificationCodes.findOne();
+
+    if (existingCode) {
+      // Atualiza o código existente
+      existingCode.code = code;
+      await existingCode.save();
+    } else {
+      // Cria um novo código
+      await VerificationCodes.create({ code });
+    }
+
+    res.json({ message: 'Código de verificação definido com sucesso' });
+  } catch (error) {
+    console.error('Erro ao definir o código de verificação:', error);
+    res.status(500).json({ error: 'Falha ao definir o código de verificação', details: error.message });
+  }
+});
+// Rota para verificar o código
+router.post('/verify-code', verifyToken, async (req, res) => {
+  const { code } = req.body;
+  const userMatricula = req.user.matricula; // Extrai a matrícula do usuário do token
+
+  if (!code) {
+    return res.status(400).json({ error: 'Código de verificação é obrigatório' });
+  }
+
+  try {
+    // Busca o código de verificação
+    const verificationCode = await VerificationCodes.findOne();
+
+    if (!verificationCode) {
+      return res.status(400).json({ error: 'Nenhum código de verificação definido' });
+    }
+
+    // Verifica se o código fornecido pelo usuário corresponde ao código definido pelo admin
+    if (code !== verificationCode.code) {
+      return res.status(400).json({ error: 'Código de verificação incorreto' });
+    }
+
+    // Atualiza o status do usuário para verificado (opcional)
+    const user = await Users.findOne({ where: { matricula: userMatricula } });
+    if (user) {
+      user.isVerified = true; // Adicione um campo `isVerified` ao modelo `Users`
+      await user.save();
+    }
+
+    res.json({ message: 'Código de verificação válido' });
+  } catch (error) {
+    console.error('Erro ao verificar o código:', error);
+    res.status(500).json({ error: 'Falha ao verificar o código', details: error.message });
+  }
+});
+// Rota para obter o código de verificação atual (apenas para admin)
+router.get('/get-code', verifyToken, authorize(['ADMIN']), async (req, res) => {
+  try {
+    // Busca o código de verificação
+    const verificationCode = await VerificationCodes.findOne();
+
+    if (!verificationCode) {
+      return res.status(404).json({ error: 'Nenhum código de verificação definido' });
+    }
+
+    // Retorna o código de verificação
+    res.json({ code: verificationCode.code });
+  } catch (error) {
+    console.error('Erro ao obter o código de verificação:', error);
+    res.status(500).json({ error: 'Falha ao obter o código de verificação', details: error.message });
+  }
+});
 // Route to log out
 router.post("/logout", async (req, res) => {
     //deleting cookie
