@@ -371,7 +371,7 @@ router.get("/all-users", verifyToken, authorize(['ADMIN']), async (req, res) => 
 
         // Fetch all users, excluding sensitive information
         const users = await Users.findAll({
-            attributes: ['username', 'email', 'matricula', 'role', 'createdAt', 'updatedAt'],
+            attributes: ['username', 'email', 'matricula', 'role', 'createdAt', 'updatedAt', 'typeOfPlan', 'startDate', 'endDate', 'profilePhoto'],
             where: {
                 matricula: {
                     [Op.ne]: req.user.matricula // Exclude the requesting user
