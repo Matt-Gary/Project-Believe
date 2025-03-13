@@ -68,21 +68,21 @@ const calculateEndDate = (startDate, typeOfPlan) => {
 router.post('/register', async (req, res) => {
     const { username, password, email, matricula, role, phoneNumber, typeOfPlan, startDate, 'g-recaptcha-response': captchaResponse } = req.body;
 
-    // Validate CAPTCHA response
-    if (!captchaResponse) {
-        return res.status(400).json({ error: 'CAPTCHA verification failed' });
-    }
+    // // Validate CAPTCHA response
+    // if (!captchaResponse) {
+    //     return res.status(400).json({ error: 'CAPTCHA verification failed' });
+    // }
 
-    // Verify the CAPTCHA response with Google
-    const verificationUrl = `https://www.google.com/recaptcha/api/siteverify?secret=${process.env.RECAPTCHA_SECRET_KEY}&response=${captchaResponse}`;
+    // // Verify the CAPTCHA response with Google
+    // const verificationUrl = `https://www.google.com/recaptcha/api/siteverify?secret=${process.env.RECAPTCHA_SECRET_KEY}&response=${captchaResponse}`;
 
     try {
-        const response = await axios.post(verificationUrl);
-        const { success } = response.data;
+        // const response = await axios.post(verificationUrl);
+        // const { success } = response.data;
 
-        if (!success) {
-            return res.status(400).json({ error: 'CAPTCHA verification failed' });
-        }
+        // if (!success) {
+        //     return res.status(400).json({ error: 'CAPTCHA verification failed' });
+        // }
 
         // Validate email format
         if (!emailRegex.test(email)) {
@@ -364,26 +364,61 @@ router.post("/reset-password/", async (req, res) => {
     }
 })
 // New route to get all registered users
-router.get("/all-users", verifyToken, authorize(['ADMIN']), async (req, res) => {
-    try {
-        // Check if the requesting user is an admin
-        const requestingUser = await Users.findByPk(req.user.matricula);
+router.get('/all-users', verifyToken, authorize(['ADMIN']), async (req, res) => {
+  try {
+    // Fetch all users, excluding sensitive information
+    const users = await Users.findAll({
+      attributes: [
+        'username',
+        'email',
+        'matricula',
+        'role',
+        'createdAt',
+        'updatedAt',
+        'typeOfPlan',
+        'startDate',
+        'endDate',
+        'profilePhoto',
+      ],
+      where: {
+        matricula: {
+          [Op.ne]: req.user.matricula, // Exclude the requesting user
+        },
+      },
+    });
 
-        // Fetch all users, excluding sensitive information
-        const users = await Users.findAll({
-            attributes: ['username', 'email', 'matricula', 'role', 'createdAt', 'updatedAt', 'typeOfPlan', 'startDate', 'endDate', 'profilePhoto'],
-            where: {
-                matricula: {
-                    [Op.ne]: req.user.matricula // Exclude the requesting user
-                }
-            }
-        });
+    // Add logic to handle profile photos
+    const usersWithPhotos = await Promise.all(
+      users.map(async (user) => {
+        if (user.profilePhoto) {
+          // Use the full S3 key stored in profilePhoto
+          const photoKey = user.profilePhoto;
 
-        res.json({ users });
-    } catch (error) {
-        console.error("Error fetching all users:", error);
-        res.status(500).json({ message: "Server Error" });
-    }
+          // Generate a signed URL for the profile photo
+          const signedUrl = s3.getSignedUrl('getObject', {
+            Bucket: BUCKET_NAME,
+            Key: photoKey,
+            Expires: 3600, // URL expires in 1 hour
+          });
+
+          return {
+            ...user.toJSON(),
+            profilePhotoUrl: signedUrl,
+          };
+        } else {
+          return {
+            ...user.toJSON(),
+            profilePhotoUrl: null,
+          };
+        }
+      })
+    );
+
+    res.json({ users: usersWithPhotos });
+  } catch (error) {
+    console.error('Error fetching all users:', error);
+    res.status(500).json({ message: 'Server Error' });
+  }
 });
 // Route to get an existing user
 router.get("/userByMatricula", verifyToken, authorize(['ADMIN', 'USER']), async (req, res) => {
@@ -713,13 +748,12 @@ router.get('/profilephoto', verifyToken, authorize(['ADMIN', 'USER']), async (re
       return res.status(404).json({ error: "No profile photo exists" });
     }
 
-    // Extract S3 key from full URL
-    const photoKey = user.profilePhoto.split('/').pop();
-    const decodedKey = decodeURIComponent(photoKey)
+    // Use the full S3 key stored in profilePhoto
+    const photoKey = user.profilePhoto; // Já é a chave completa, por exemplo: "users/12345/profile_12345_1698765432100_photo.jpg"
     
     const s3Object = s3.getObject({
       Bucket: BUCKET_NAME,
-      Key: decodedKey
+      Key: photoKey // Use a chave completa
     });
 
     // Set proper content type for image responses
