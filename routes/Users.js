@@ -463,96 +463,112 @@ router.delete("/userByMatricula", verifyToken, authorize(['ADMIN']), async (req,
 
 // Edit a existent user
 router.put("/userUpdateByMatricula", verifyToken, authorize(['ADMIN', 'USER']), async (req, res) => {
-  const { username, email, matricula, phoneNumber } = req.body;
+  const {
+    username,
+    email,
+    matricula,
+    phoneNumber,
+    profilePhoto,
+    resetPasswordCode,
+    resetPasswordExpiresAt,
+    role,
+    typeOfPlan,
+    startDate,
+    endDate,
+  } = req.body;
 
   try {
-      // Input Validation
-      if (matricula == null || matricula.trim().length === 0) {
-          return res.status(400).json("The matricula can't be null or empty!");
-      }
-
-      // Input Sanitization
-      const sanitizedMatricula = matricula.trim();
-      const sanitizedUsername = username ? username.trim() : null;
-      const sanitizedEmail = email ? email.trim() : null;
-      const sanitizedPhoneNumber = phoneNumber ? phoneNumber.trim() : null;
-
-      // Declare formattedPhoneNumber outside the if block
-      let formattedPhoneNumber = null;
-
-      // Validate Phone Number Format (must be 11 digits)
-      if (sanitizedPhoneNumber) {
-          const phoneRegex = /^\d{11}$/;
-          if (!phoneRegex.test(sanitizedPhoneNumber)) {
-              return res.status(400).json({ error: "Número de telefone inválido. Deve conter 11 dígitos." });
-          }
-
-          // Format the phone number to include +55 country code
-          formattedPhoneNumber = `55${sanitizedPhoneNumber}`;
-      }
-
-      // Fetch User by Matricula
-      const userUpdated = await Users.findOne({ where: { matricula: sanitizedMatricula } });
-      if (!userUpdated) {
-          return res.status(400).json("The matricula doesn't have a user registered!");
-      }
-
-      // Check for Existing Username, Email, or Phone Number
-      if (sanitizedUsername || sanitizedEmail || formattedPhoneNumber) {
-        const existingUser = await Users.findOne({
-            where: {
-                [Op.and]: [
-                    { 
-                        [Op.or]: [
-                            { username: sanitizedUsername },
-                            { email: sanitizedEmail },
-                            { phoneNumber: formattedPhoneNumber }
-                        ]
-                    },
-                    { matricula: { [Op.ne]: sanitizedMatricula } } // Exclude current user
-                ]
-            }
-        });
-    
-        if (existingUser) {
-            if (existingUser.username === sanitizedUsername) {
-                return res.status(400).json("Username already exists!");
-            }
-            if (existingUser.email === sanitizedEmail) {
-                return res.status(400).json("Email already exists!");
-            }
-            if (existingUser.phoneNumber === formattedPhoneNumber) {
-                return res.status(400).json("Phone number already exists!");
-            }
-        }
+    // Input Validation
+    if (matricula == null || matricula.trim().length === 0) {
+      return res.status(400).json("The matricula can't be null or empty!");
     }
 
-      // Prepare Update Object
-      const updateData = {};
-      if (sanitizedUsername) {
-          updateData.username = sanitizedUsername;
-      }
-      if (sanitizedEmail) {
-          updateData.email = sanitizedEmail;
-      }
-      if (formattedPhoneNumber) { // Use formatted phone number for update
-          updateData.phoneNumber = formattedPhoneNumber;
-      }
-      updateData.updatedAt = Date.now();
+    // Input Sanitization
+    const sanitizedMatricula = matricula.trim();
+    const sanitizedUsername = username ? username.trim() : null;
+    const sanitizedEmail = email ? email.trim() : null;
+    const sanitizedPhoneNumber = phoneNumber ? phoneNumber.trim() : null;
+    const sanitizedProfilePhoto = profilePhoto ? profilePhoto.trim() : null;
+    const sanitizedResetPasswordCode = resetPasswordCode ? resetPasswordCode.trim() : null;
+    const sanitizedResetPasswordExpiresAt = resetPasswordExpiresAt ? new Date(resetPasswordExpiresAt) : null;
+    const sanitizedRole = role ? role.trim().toUpperCase() : null;
+    const sanitizedTypeOfPlan = typeOfPlan ? typeOfPlan.trim().toLowerCase() : null;
+    const sanitizedStartDate = startDate ? new Date(startDate) : null;
+    const sanitizedEndDate = endDate ? new Date(endDate) : null;
 
-      // Update User in Database
-      const [response] = await Users.update(updateData, {
-          where: { matricula: sanitizedMatricula }
+    // Validate Phone Number Format (must be 11 digits)
+    let formattedPhoneNumber = null;
+    if (sanitizedPhoneNumber) {
+      const phoneRegex = /^\d{11}$/;
+      if (!phoneRegex.test(sanitizedPhoneNumber)) {
+        return res.status(400).json({ error: "Número de telefone inválido. Deve conter 11 dígitos." });
+      }
+      formattedPhoneNumber = `55${sanitizedPhoneNumber}`; // Format with country code
+    }
+
+    // Fetch User by Matricula
+    const userUpdated = await Users.findOne({ where: { matricula: sanitizedMatricula } });
+    if (!userUpdated) {
+      return res.status(400).json("The matricula doesn't have a user registered!");
+    }
+
+    // Check for Existing Username, Email, or Phone Number
+    if (sanitizedUsername || sanitizedEmail || formattedPhoneNumber) {
+      const existingUser = await Users.findOne({
+        where: {
+          [Op.and]: [
+            {
+              [Op.or]: [
+                { username: sanitizedUsername },
+                { email: sanitizedEmail },
+                { phoneNumber: formattedPhoneNumber },
+              ],
+            },
+            { matricula: { [Op.ne]: sanitizedMatricula } }, // Exclude current user
+          ],
+        },
       });
 
-      if (response === 0) {
-          return res.status(400).json("No user was updated. Please check the matricula.");
+      if (existingUser) {
+        if (existingUser.username === sanitizedUsername) {
+          return res.status(400).json("Username already exists!");
+        }
+        if (existingUser.email === sanitizedEmail) {
+          return res.status(400).json("Email already exists!");
+        }
+        if (existingUser.phoneNumber === formattedPhoneNumber) {
+          return res.status(400).json("Phone number already exists!");
+        }
       }
+    }
 
-      return res.status(200).json("User updated successfully!");
+    // Prepare Update Object
+    const updateData = {};
+    if (sanitizedUsername) updateData.username = sanitizedUsername;
+    if (sanitizedEmail) updateData.email = sanitizedEmail;
+    if (formattedPhoneNumber) updateData.phoneNumber = formattedPhoneNumber;
+    if (sanitizedProfilePhoto) updateData.profilePhoto = sanitizedProfilePhoto;
+    if (sanitizedResetPasswordCode) updateData.resetPasswordCode = sanitizedResetPasswordCode;
+    if (sanitizedResetPasswordExpiresAt) updateData.resetPasswordExpiresAt = sanitizedResetPasswordExpiresAt;
+    if (sanitizedRole) updateData.role = sanitizedRole;
+    if (sanitizedTypeOfPlan) updateData.typeOfPlan = sanitizedTypeOfPlan;
+    if (sanitizedStartDate) updateData.startDate = sanitizedStartDate;
+    if (sanitizedEndDate) updateData.endDate = sanitizedEndDate;
+    updateData.updatedAt = new Date(); // Always update the updatedAt field
+
+    // Update User in Database
+    const [response] = await Users.update(updateData, {
+      where: { matricula: sanitizedMatricula },
+    });
+
+    if (response === 0) {
+      return res.status(400).json("No user was updated. Please check the matricula.");
+    }
+
+    return res.status(200).json("User updated successfully!");
   } catch (error) {
-      console.error("Error updating user:", error);
-      return res.status(500).json({ error: "An error occurred while updating the user." });
+    console.error("Error updating user:", error);
+    return res.status(500).json({ error: "An error occurred while updating the user." });
   }
 });
 
