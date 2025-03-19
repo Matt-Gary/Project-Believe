@@ -554,6 +554,14 @@ router.put("/userUpdateByMatricula", verifyToken, authorize(['ADMIN', 'USER']), 
     if (sanitizedTypeOfPlan) updateData.typeOfPlan = sanitizedTypeOfPlan;
     if (sanitizedStartDate) updateData.startDate = sanitizedStartDate;
     if (sanitizedEndDate) updateData.endDate = sanitizedEndDate;
+
+    // Automatically calculate endDate if startDate is updated
+    if (sanitizedStartDate) {
+      const planType = sanitizedTypeOfPlan || userUpdated.typeOfPlan; // Use updated typeOfPlan or existing one
+      updateData.endDate = calculateEndDate(sanitizedStartDate, planType);
+    }
+
+        
     updateData.updatedAt = new Date(); // Always update the updatedAt field
 
     // Update User in Database
