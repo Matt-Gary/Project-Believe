@@ -157,12 +157,16 @@ router.post("/login", async (req, res) => {
             return res.status(400).json({message: "Credenciais inválidas"})    
         }
         // Create a JSON Web Token (JWT) for the user
-        const token = jwt.sign({
-            matricula: user.matricula, 
+        const token = jwt.sign(
+          {
+            matricula: user.matricula,
             email: user.email,
             username: user.username,
-            role: user.role, 
-            phoneNumber: user.phoneNumber
+            role: user.role,
+            phoneNumber: user.phoneNumber,
+            typeOfPlan: user.planType, // Include plan type
+            startDate: user.startDate, // Include start date
+            endDate: user.endDate, // Include end date
         },
         process.env.SECRET_KEY, {
             expiresIn: "1h" // Token will expire in 1 hour

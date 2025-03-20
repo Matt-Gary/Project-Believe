@@ -23,7 +23,7 @@ function verifyToken(req, res, next) {
             username: decoded.username,
             role: decoded.role,
             phoneNumber: decoded.phoneNumber,
-            planType: decoded.planType, // Include plan type
+            typeOfPlan: decoded.typeOfPlan, // Include plan type
             startDate: decoded.startDate, // Include start date
             endDate: decoded.endDate // Include end date
         };
