@@ -18,11 +18,14 @@ function verifyToken(req, res, next) {
         console.log('Decoded token data:', decoded); // Log decoded data
         // Attach the decoded user data (including role) to the request object
         req.user = {
-            matricula: decoded.matricula, // User's unique identifier
-            email: decoded.email, // User's email
-            username: decoded.username, // User's username
-            role: decoded.role, // User's role (e.g., ADMIN, USER)
-            phoneNumber: decoded.phoneNumber
+            matricula: decoded.matricula,
+            email: decoded.email,
+            username: decoded.username,
+            role: decoded.role,
+            phoneNumber: decoded.phoneNumber,
+            typeOfPlan: decoded.typeOfPlan, // Include plan type
+            startDate: decoded.startDate, // Include start date
+            endDate: decoded.endDate // Include end date
         };
 
         next(); // Proceed to the next middleware or route handler

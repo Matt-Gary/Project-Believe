@@ -66,23 +66,23 @@ const calculateEndDate = (startDate, typeOfPlan) => {
 
 // Register a new user
 router.post('/register', async (req, res) => {
-    const { username, password, email, matricula, role, phoneNumber, typeOfPlan, startDate, 'g-recaptcha-response': captchaResponse } = req.body;
+    const { username, password, email, matricula, role, phoneNumber, typeOfPlan, startDate, recaptchaToken } = req.body;
 
     // Validate CAPTCHA response
-    if (!captchaResponse) {
-        return res.status(400).json({ error: 'CAPTCHA verification failed' });
-    }
+    if (!recaptchaToken) {
+         return res.status(400).json({ error: 'CAPTCHA verification failed' });
+     }
 
-    // Verify the CAPTCHA response with Google
-    const verificationUrl = `https://www.google.com/recaptcha/api/siteverify?secret=${process.env.RECAPTCHA_SECRET_KEY}&response=${captchaResponse}`;
+     // Verify the CAPTCHA response with Google
+     const verificationUrl = `https://www.google.com/recaptcha/api/siteverify?secret=${process.env.RECAPTCHA_SECRET_KEY}&response=${recaptchaToken}`;
 
     try {
-        const response = await axios.post(verificationUrl);
-        const { success } = response.data;
+         const response = await axios.post(verificationUrl);
+         const { success } = response.data;
 
-        if (!success) {
-            return res.status(400).json({ error: 'CAPTCHA verification failed' });
-        }
+         if (!success) {
+             return res.status(400).json({ error: 'CAPTCHA verification failed' });
+         }
 
         // Validate email format
         if (!emailRegex.test(email)) {
@@ -157,12 +157,16 @@ router.post("/login", async (req, res) => {
             return res.status(400).json({message: "Credenciais inválidas"})    
         }
         // Create a JSON Web Token (JWT) for the user
-        const token = jwt.sign({
-            matricula: user.matricula, 
+        const token = jwt.sign(
+          {
+            matricula: user.matricula,
             email: user.email,
             username: user.username,
-            role: user.role, 
-            phoneNumber: user.phoneNumber
+            role: user.role,
+            phoneNumber: user.phoneNumber,
+            typeOfPlan: user.planType, // Include plan type
+            startDate: user.startDate, // Include start date
+            endDate: user.endDate, // Include end date
         },
         process.env.SECRET_KEY, {
             expiresIn: "1h" // Token will expire in 1 hour
@@ -364,26 +368,61 @@ router.post("/reset-password/", async (req, res) => {
     }
 })
 // New route to get all registered users
-router.get("/all-users", verifyToken, authorize(['ADMIN']), async (req, res) => {
-    try {
-        // Check if the requesting user is an admin
-        const requestingUser = await Users.findByPk(req.user.matricula);
+router.get('/all-users', verifyToken, authorize(['ADMIN']), async (req, res) => {
+  try {
+    // Fetch all users, excluding sensitive information
+    const users = await Users.findAll({
+      attributes: [
+        'username',
+        'email',
+        'matricula',
+        'role',
+        'createdAt',
+        'updatedAt',
+        'typeOfPlan',
+        'startDate',
+        'endDate',
+        'profilePhoto',
+      ],
+      where: {
+        matricula: {
+          [Op.ne]: req.user.matricula, // Exclude the requesting user
+        },
+      },
+    });
 
-        // Fetch all users, excluding sensitive information
-        const users = await Users.findAll({
-            attributes: ['username', 'email', 'matricula', 'role', 'createdAt', 'updatedAt', 'typeOfPlan', 'startDate', 'endDate', 'profilePhoto'],
-            where: {
-                matricula: {
-                    [Op.ne]: req.user.matricula // Exclude the requesting user
-                }
-            }
-        });
+    // Add logic to handle profile photos
+    const usersWithPhotos = await Promise.all(
+      users.map(async (user) => {
+        if (user.profilePhoto) {
+          // Use the full S3 key stored in profilePhoto
+          const photoKey = user.profilePhoto;
 
-        res.json({ users });
-    } catch (error) {
-        console.error("Error fetching all users:", error);
-        res.status(500).json({ message: "Server Error" });
-    }
+          // Generate a signed URL for the profile photo
+          const signedUrl = s3.getSignedUrl('getObject', {
+            Bucket: BUCKET_NAME,
+            Key: photoKey,
+            Expires: 3600, // URL expires in 1 hour
+          });
+
+          return {
+            ...user.toJSON(),
+            profilePhotoUrl: signedUrl,
+          };
+        } else {
+          return {
+            ...user.toJSON(),
+            profilePhotoUrl: null,
+          };
+        }
+      })
+    );
+
+    res.json({ users: usersWithPhotos });
+  } catch (error) {
+    console.error('Error fetching all users:', error);
+    res.status(500).json({ message: 'Server Error' });
+  }
 });
 // Route to get an existing user
 router.get("/userByMatricula", verifyToken, authorize(['ADMIN', 'USER']), async (req, res) => {
@@ -428,96 +467,120 @@ router.delete("/userByMatricula", verifyToken, authorize(['ADMIN']), async (req,
 
 // Edit a existent user
 router.put("/userUpdateByMatricula", verifyToken, authorize(['ADMIN', 'USER']), async (req, res) => {
-  const { username, email, matricula, phoneNumber } = req.body;
+  const {
+    username,
+    email,
+    matricula,
+    phoneNumber,
+    profilePhoto,
+    resetPasswordCode,
+    resetPasswordExpiresAt,
+    role,
+    typeOfPlan,
+    startDate,
+    endDate,
+  } = req.body;
 
   try {
-      // Input Validation
-      if (matricula == null || matricula.trim().length === 0) {
-          return res.status(400).json("The matricula can't be null or empty!");
-      }
-
-      // Input Sanitization
-      const sanitizedMatricula = matricula.trim();
-      const sanitizedUsername = username ? username.trim() : null;
-      const sanitizedEmail = email ? email.trim() : null;
-      const sanitizedPhoneNumber = phoneNumber ? phoneNumber.trim() : null;
-
-      // Declare formattedPhoneNumber outside the if block
-      let formattedPhoneNumber = null;
-
-      // Validate Phone Number Format (must be 11 digits)
-      if (sanitizedPhoneNumber) {
-          const phoneRegex = /^\d{11}$/;
-          if (!phoneRegex.test(sanitizedPhoneNumber)) {
-              return res.status(400).json({ error: "Número de telefone inválido. Deve conter 11 dígitos." });
-          }
-
-          // Format the phone number to include +55 country code
-          formattedPhoneNumber = `55${sanitizedPhoneNumber}`;
-      }
-
-      // Fetch User by Matricula
-      const userUpdated = await Users.findOne({ where: { matricula: sanitizedMatricula } });
-      if (!userUpdated) {
-          return res.status(400).json("The matricula doesn't have a user registered!");
-      }
-
-      // Check for Existing Username, Email, or Phone Number
-      if (sanitizedUsername || sanitizedEmail || formattedPhoneNumber) {
-        const existingUser = await Users.findOne({
-            where: {
-                [Op.and]: [
-                    { 
-                        [Op.or]: [
-                            { username: sanitizedUsername },
-                            { email: sanitizedEmail },
-                            { phoneNumber: formattedPhoneNumber }
-                        ]
-                    },
-                    { matricula: { [Op.ne]: sanitizedMatricula } } // Exclude current user
-                ]
-            }
-        });
-    
-        if (existingUser) {
-            if (existingUser.username === sanitizedUsername) {
-                return res.status(400).json("Username already exists!");
-            }
-            if (existingUser.email === sanitizedEmail) {
-                return res.status(400).json("Email already exists!");
-            }
-            if (existingUser.phoneNumber === formattedPhoneNumber) {
-                return res.status(400).json("Phone number already exists!");
-            }
-        }
+    // Input Validation
+    if (matricula == null || matricula.trim().length === 0) {
+      return res.status(400).json("The matricula can't be null or empty!");
     }
 
-      // Prepare Update Object
-      const updateData = {};
-      if (sanitizedUsername) {
-          updateData.username = sanitizedUsername;
-      }
-      if (sanitizedEmail) {
-          updateData.email = sanitizedEmail;
-      }
-      if (formattedPhoneNumber) { // Use formatted phone number for update
-          updateData.phoneNumber = formattedPhoneNumber;
-      }
-      updateData.updatedAt = Date.now();
+    // Input Sanitization
+    const sanitizedMatricula = matricula.trim();
+    const sanitizedUsername = username ? username.trim() : null;
+    const sanitizedEmail = email ? email.trim() : null;
+    const sanitizedPhoneNumber = phoneNumber ? phoneNumber.trim() : null;
+    const sanitizedProfilePhoto = profilePhoto ? profilePhoto.trim() : null;
+    const sanitizedResetPasswordCode = resetPasswordCode ? resetPasswordCode.trim() : null;
+    const sanitizedResetPasswordExpiresAt = resetPasswordExpiresAt ? new Date(resetPasswordExpiresAt) : null;
+    const sanitizedRole = role ? role.trim().toUpperCase() : null;
+    const sanitizedTypeOfPlan = typeOfPlan ? typeOfPlan.trim().toLowerCase() : null;
+    const sanitizedStartDate = startDate ? new Date(startDate) : null;
+    const sanitizedEndDate = endDate ? new Date(endDate) : null;
 
-      // Update User in Database
-      const [response] = await Users.update(updateData, {
-          where: { matricula: sanitizedMatricula }
+    // Validate Phone Number Format (must be 11 digits)
+    let formattedPhoneNumber = null;
+    if (sanitizedPhoneNumber) {
+      const phoneRegex = /^\d{11}$/;
+      if (!phoneRegex.test(sanitizedPhoneNumber)) {
+        return res.status(400).json({ error: "Número de telefone inválido. Deve conter 11 dígitos." });
+      }
+      formattedPhoneNumber = `55${sanitizedPhoneNumber}`; // Format with country code
+    }
+
+    // Fetch User by Matricula
+    const userUpdated = await Users.findOne({ where: { matricula: sanitizedMatricula } });
+    if (!userUpdated) {
+      return res.status(400).json("The matricula doesn't have a user registered!");
+    }
+
+    // Check for Existing Username, Email, or Phone Number
+    if (sanitizedUsername || sanitizedEmail || formattedPhoneNumber) {
+      const existingUser = await Users.findOne({
+        where: {
+          [Op.and]: [
+            {
+              [Op.or]: [
+                { username: sanitizedUsername },
+                { email: sanitizedEmail },
+                { phoneNumber: formattedPhoneNumber },
+              ],
+            },
+            { matricula: { [Op.ne]: sanitizedMatricula } }, // Exclude current user
+          ],
+        },
       });
 
-      if (response === 0) {
-          return res.status(400).json("No user was updated. Please check the matricula.");
+      if (existingUser) {
+        if (existingUser.username === sanitizedUsername) {
+          return res.status(400).json("Username already exists!");
+        }
+        if (existingUser.email === sanitizedEmail) {
+          return res.status(400).json("Email already exists!");
+        }
+        if (existingUser.phoneNumber === formattedPhoneNumber) {
+          return res.status(400).json("Phone number already exists!");
+        }
       }
+    }
 
-      return res.status(200).json("User updated successfully!");
+    // Prepare Update Object
+    const updateData = {};
+    if (sanitizedUsername) updateData.username = sanitizedUsername;
+    if (sanitizedEmail) updateData.email = sanitizedEmail;
+    if (formattedPhoneNumber) updateData.phoneNumber = formattedPhoneNumber;
+    if (sanitizedProfilePhoto) updateData.profilePhoto = sanitizedProfilePhoto;
+    if (sanitizedResetPasswordCode) updateData.resetPasswordCode = sanitizedResetPasswordCode;
+    if (sanitizedResetPasswordExpiresAt) updateData.resetPasswordExpiresAt = sanitizedResetPasswordExpiresAt;
+    if (sanitizedRole) updateData.role = sanitizedRole;
+    if (sanitizedTypeOfPlan) updateData.typeOfPlan = sanitizedTypeOfPlan;
+    if (sanitizedStartDate) updateData.startDate = sanitizedStartDate;
+    if (sanitizedEndDate) updateData.endDate = sanitizedEndDate;
+
+    // Automatically calculate endDate if startDate is updated
+    if (sanitizedStartDate) {
+      const planType = sanitizedTypeOfPlan || userUpdated.typeOfPlan; // Use updated typeOfPlan or existing one
+      updateData.endDate = calculateEndDate(sanitizedStartDate, planType);
+    }
+
+        
+    updateData.updatedAt = new Date(); // Always update the updatedAt field
+
+    // Update User in Database
+    const [response] = await Users.update(updateData, {
+      where: { matricula: sanitizedMatricula },
+    });
+
+    if (response === 0) {
+      return res.status(400).json("No user was updated. Please check the matricula.");
+    }
+
+    return res.status(200).json("User updated successfully!");
   } catch (error) {
-      console.error("Error updating user:", error);
-      return res.status(500).json({ error: "An error occurred while updating the user." });
+    console.error("Error updating user:", error);
+    return res.status(500).json({ error: "An error occurred while updating the user." });
   }
 });
 
@@ -713,13 +776,12 @@ router.get('/profilephoto', verifyToken, authorize(['ADMIN', 'USER']), async (re
       return res.status(404).json({ error: "No profile photo exists" });
     }
 
-    // Extract S3 key from full URL
-    const photoKey = user.profilePhoto.split('/').pop();
-    const decodedKey = decodeURIComponent(photoKey)
+    // Use the full S3 key stored in profilePhoto
+    const photoKey = user.profilePhoto; // Já é a chave completa, por exemplo: "users/12345/profile_12345_1698765432100_photo.jpg"
     
     const s3Object = s3.getObject({
       Bucket: BUCKET_NAME,
-      Key: decodedKey
+      Key: photoKey // Use a chave completa
     });
 
     // Set proper content type for image responses
