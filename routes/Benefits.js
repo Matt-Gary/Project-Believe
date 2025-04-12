@@ -100,7 +100,6 @@ router.post('/', verifyToken, authorize(['ADMIN']), async (req, res) => {
   }
 });
 
-// POST route to update partnership logo
 router.post('/update-logo/:id', verifyToken, authorize(['ADMIN']), upload.single('logo'), async (req, res) => {
   const transaction = await sequelize.transaction();
   try {
@@ -123,17 +122,30 @@ router.post('/update-logo/:id', verifyToken, authorize(['ADMIN']), upload.single
     // Delete old logo if it exists
     if (partnership.companyLogo) {
       try {
+        // Extract the key from URL if it's a full URL
+        const oldKey = partnership.companyLogo.includes('amazonaws.com/') 
+          ? partnership.companyLogo.split('amazonaws.com/')[1]
+          : partnership.companyLogo;
+        
         await s3.deleteObject({
           Bucket: BUCKET_NAME,
-          Key: partnership.companyLogo
+          Key: oldKey
         }).promise();
       } catch (deleteErr) {
         console.error('Error deleting old logo:', deleteErr);
+        // Don't fail the operation if deletion fails
       }
     }
 
-    // Generate a unique filename for the new logo
-    const fileName = `partnerships/${partnershipId}/logo_${partnershipId}_${Date.now()}_${logoFile.originalname}`;
+    // Generate a unique and sanitized filename for the new logo
+    const sanitizedCompanyName = partnership.companyName
+      .replace(/\s+/g, '_')
+      .replace(/[^a-zA-Z0-9_-]/g, '');
+    const sanitizedFileName = logoFile.originalname
+      .replace(/\s+/g, '_')
+      .replace(/[^a-zA-Z0-9_.-]/g, '');
+
+    const fileName = `partnerships/${partnershipId}/${sanitizedCompanyName}_${Date.now()}_${sanitizedFileName}`;
 
     // Upload the new logo to S3
     const uploadParams = {
@@ -141,13 +153,13 @@ router.post('/update-logo/:id', verifyToken, authorize(['ADMIN']), upload.single
       Key: fileName,
       Body: logoFile.buffer,
       ContentType: logoFile.mimetype,
-      ACL: 'public-read' // Remove if bucket policies block ACLs
+      ACL: 'public-read'
     };
 
     const s3Response = await s3.upload(uploadParams).promise();
 
-    // Update the partnership with the new logo key
-    partnership.companyLogo = fileName;
+    // Update the partnership with the full logo URL
+    partnership.companyLogo = s3Response.Location;
     await partnership.save({ transaction, fields: ['companyLogo'] });
 
     await transaction.commit();
@@ -189,6 +201,27 @@ router.get('/:id', async (req, res) => {
   } catch (error) {
     console.error('Error fetching partnership:', error);
     res.status(500).json({ error: 'Failed to fetch partnership' });
+  }
+});
+
+// GET /partnerships/:id/logo
+router.get('/:id/logo', async (req, res) => {
+  try {
+    const partnership = await Partnerships.findByPk(req.params.id);
+    if (!partnership || !partnership.companyLogo) {
+      return res.status(404).send();
+    }
+
+    // For private files: Generate a signed URL
+    const url = s3.getSignedUrl('getObject', {
+      Bucket: BUCKET_NAME,
+      Key: partnership.companyLogo,
+      Expires: 60 // URL valid for 60 seconds
+    });
+
+    res.redirect(url); // Or return as JSON
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to get logo' });
   }
 });
 

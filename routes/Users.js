@@ -69,20 +69,20 @@ router.post('/register', async (req, res) => {
     const { username, password, email, matricula, role, phoneNumber, typeOfPlan, startDate, recaptchaToken } = req.body;
 
     // Validate CAPTCHA response
-    if (!recaptchaToken) {
-         return res.status(400).json({ error: 'CAPTCHA verification failed' });
-     }
+   // if (!recaptchaToken) {
+  //       return res.status(400).json({ error: 'CAPTCHA verification failed' });
+ //    }
 
      // Verify the CAPTCHA response with Google
-     const verificationUrl = `https://www.google.com/recaptcha/api/siteverify?secret=${process.env.RECAPTCHA_SECRET_KEY}&response=${recaptchaToken}`;
+  //   const verificationUrl = `https://www.google.com/recaptcha/api/siteverify?secret=${process.env.RECAPTCHA_SECRET_KEY}&response=${recaptchaToken}`;
 
     try {
-         const response = await axios.post(verificationUrl);
-         const { success } = response.data;
+         //const response = await axios.post(verificationUrl);
+         //const { success } = response.data;
 
-         if (!success) {
-             return res.status(400).json({ error: 'CAPTCHA verification failed' });
-         }
+         //if (!success) {
+        //     return res.status(400).json({ error: 'CAPTCHA verification failed' });
+       //  }
 
         // Validate email format
         if (!emailRegex.test(email)) {

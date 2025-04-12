@@ -136,21 +136,38 @@ router.get('/events/:id', verifyToken, async (req, res) => {
   }
 });
 
-  // DELETE route to delete an event by ID
+ // DELETE route to delete an event by ID
 router.delete('/events/:id', verifyToken, authorize(['ADMIN']), async (req, res) => {
+  const transaction = await sequelize.transaction();
   try {
     const eventId = req.params.id;
 
-    // Delete the event and associated photos
-    await Events.destroy({ where: { id: eventId } });
-    await Photos.destroy({ where: { event_id: eventId } });
+    // First get all photo records to delete from S3
+    const photos = await Photos.findAll({ 
+      where: { event_id: eventId },
+      transaction
+    });
 
-    res.json({ message: 'Event and associated photos deleted successfully' });
+    // Delete from S3
+    await Promise.all(photos.map(photo => {
+      return s3.deleteObject({
+        Bucket: BUCKET_NAME,
+        Key: photo.drive_file_id
+      }).promise();
+    }));
+
+    // Then delete database records
+    await Photos.destroy({ where: { event_id: eventId }, transaction });
+    await Events.destroy({ where: { id: eventId }, transaction });
+    
+    await transaction.commit();
+    res.json({ message: 'Event and all associated photos deleted successfully' });
   } catch (error) {
-    res.status(500).json({ error: 'Failed to delete event' });
+    await transaction.rollback();
+    console.error('Event deletion error:', error);
+    res.status(500).json({ error: 'Failed to delete event and photos' });
   }
 });
-
 // POST route to upload photos to a specific event
 router.post('/events/:id/photos', verifyToken, authorize(['ADMIN']), upload.array('photos', 30), async (req, res) => {
   const transaction = await sequelize.transaction();
